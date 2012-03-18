@@ -112,9 +112,11 @@ lib-y += xgethostbyname.o
 lib-y += xreadlink.o
 lib-y += xrealloc_vector.o
 
+# for android-busybox-ndk
+lib-y += mntent_r.o
+
 lib-$(CONFIG_MOUNT) += match_fstype.o
 lib-$(CONFIG_UMOUNT) += match_fstype.o
-
 lib-$(CONFIG_FEATURE_UTMP) += utmp.o
 
 # A mix of optimizations (why build stuff we know won't be used)
