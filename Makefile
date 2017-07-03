@@ -1,8 +1,8 @@
 VERSION = 1
 PATCHLEVEL = 34
 SUBLEVEL = 0
-EXTRAVERSION = .git
-NAME = Unnamed
+EXTRAVERSION = .1.brutal-feravolt
+NAME = Brutal Busybox
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
