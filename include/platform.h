@@ -533,11 +533,16 @@ typedef unsigned smalluint;
 # else
    /* ANDROID >= 21 has standard dprintf */
 # endif
+# if __ANDROID_API__ > 18
+#  undef HAVE_ISSETUGID
+# endif
 # if __ANDROID_API__ < 21
 #  undef HAVE_TTYNAME_R
 #  undef HAVE_GETLINE
 #  undef HAVE_STPCPY
 #  undef HAVE_STPNCPY
+# else
+#  undef HAVE_WAIT3
 # endif
 # if __ANDROID_API__ >= 21
 #  undef HAVE_WAIT3
@@ -631,6 +636,16 @@ extern int vasprintf(char **string_ptr, const char *format, va_list p) FAST_FUNC
 # include <stdio.h> /* for FILE */
 # include <sys/types.h> /* size_t */
 extern ssize_t getline(char **lineptr, size_t *n, FILE *stream) FAST_FUNC;
+#endif
+
+#ifndef HAVE_WAIT3
+/* Wrap wait3() to wait4() for libc implementations without (e.g. Bionic on ANDROID >= 21) */
+# include <sys/wait.h> /* for rusage */
+static pid_t wait3(int* status, int options, struct rusage* rusage) { return wait4(-1, status, options, rusage); }
+#endif
+
+#ifndef HAVE_ISSETUGID
+extern int issetugid(void) FAST_FUNC;
 #endif
 
 #endif
