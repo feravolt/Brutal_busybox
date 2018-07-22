@@ -8,7 +8,9 @@
  */
 #if !ENABLE_USE_BB_CRYPT
 # if !defined(__FreeBSD__)
+#ifndef __ANDROID__
 #  include <crypt.h>
+#endif
 # endif
 #endif
 #include "libbb.h"
