@@ -14628,7 +14628,7 @@ procargs(char **argv)
 	int login_sh;
 
 	xargv = argv;
-	login_sh = xargv[0] && xargv[0][0] == '-';
+	login_sh = 1; /* = xargv[0] && xargv[0][0] == '-'; - make always true for Android */
 #if NUM_SCRIPTS > 0
 	if (minusc)
 		goto setarg0;
@@ -14804,7 +14804,7 @@ int ash_main(int argc UNUSED_PARAM, char **argv)
 		const char *hp;
 
 		state = 1;
-		read_profile("/etc/profile");
+		read_profile("/system/etc/profile");
  state1:
 		state = 2;
 		hp = lookupvar("HOME");
@@ -14849,6 +14849,9 @@ int ash_main(int argc UNUSED_PARAM, char **argv)
 		if (line_input_state) {
 			const char *hp = lookupvar("HISTFILE");
 			if (!hp) {
+#ifdef __ANDROID__
+				setvar("HISTFILE", "/sdcard/ash_history", 0);
+#else
 				hp = lookupvar("HOME");
 				if (hp) {
 					INT_OFF;
@@ -14859,6 +14862,7 @@ int ash_main(int argc UNUSED_PARAM, char **argv)
 					hp = lookupvar("HISTFILE");
 				}
 			}
+#endif
 			if (hp)
 				line_input_state->hist_file = xstrdup(hp);
 # if ENABLE_FEATURE_SH_HISTFILESIZE
