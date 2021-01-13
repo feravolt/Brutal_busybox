@@ -23,8 +23,8 @@ CFLAGS += $(call cc-option,-Wwrite-strings,)
 CFLAGS += $(call cc-option,-Wundef,)
 CFLAGS += $(call cc-option,-Wstrict-prototypes,)
 CFLAGS += $(call cc-option,-Wunused -Wunused-parameter,)
-CFLAGS += $(call cc-option,-Wunused-function -Wunused-value,)
-CFLAGS += $(call cc-option,-Wmissing-prototypes -Wmissing-declarations,)
+CFLAGS += $(call cc-option,-Wno-unused-function -Wno-unused-value,)
+CFLAGS += $(call cc-option,-Wno-missing-prototypes -Wno-missing-declarations,)
 CFLAGS += $(call cc-option,-Wno-format-security,)
 # warn about C99 declaration after statement
 CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
@@ -52,13 +52,6 @@ CFLAGS += $(call cc-option,-fno-builtin-strlen -fomit-frame-pointer -ffunction-s
 # of branch probabilities (hopefully makes bloatcheck more stable):
 CFLAGS += $(call cc-option,-fno-guess-branch-probability,)
 CFLAGS += $(call cc-option,-funsigned-char,)
-
-ifeq ($(CONFIG_STATIC_LIBGCC),y)
-# Disable it, for example, if you get
-# "clang-9: warning: argument unused during compilation: '-static-libgcc'"
-CFLAGS += $(call cc-option,-static-libgcc,)
-endif
-
 CFLAGS += $(call cc-option,-falign-functions=1,)
 
 # Defeat .eh_frame bloat (gcc 4.6.3 x86-32 defconfig: 20% smaller busybox binary):
@@ -140,9 +133,9 @@ endif
 # fall back to using a temp file:
 CRYPT_AVAILABLE := $(shell echo 'int main(void){return 0;}' >crypttest.c; $(CC) $(CFLAGS) -lcrypt -o /dev/null crypttest.c >/dev/null 2>&1 && echo "y"; rm crypttest.c)
 ifeq ($(CRYPT_AVAILABLE),y)
-LDLIBS += m rt crypt
+LDLIBS += m crypt
 else
-LDLIBS += m rt
+LDLIBS += m
 endif
 # libm may be needed for dc, awk, ntpd
 # librt may be needed for clock_gettime()
@@ -166,7 +159,7 @@ ifeq ($(CONFIG_SELINUX),y)
 SELINUX_PC_MODULES = libselinux libsepol
 $(eval $(call pkg_check_modules,SELINUX,$(SELINUX_PC_MODULES)))
 CPPFLAGS += $(SELINUX_CFLAGS)
-LDLIBS += $(if $(SELINUX_LIBS),$(SELINUX_LIBS:-l%=%),$(SELINUX_PC_MODULES:lib%=%))
+LDLIBS += $($(SELINUX_PC_MODULES:lib%=%))
 endif
 
 ifeq ($(CONFIG_FEATURE_NSLOOKUP_BIG),y)

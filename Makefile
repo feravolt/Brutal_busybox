@@ -476,6 +476,7 @@ libs-y		:= \
 		findutils/ \
 		init/ \
 		libbb/ \
+		libres/ \
 		libpwdgrp/ \
 		loginutils/ \
 		mailutils/ \
