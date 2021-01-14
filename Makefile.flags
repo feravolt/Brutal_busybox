@@ -69,14 +69,14 @@ CFLAGS += $(call cc-option,-Wno-string-plus-int -Wno-constant-logical-operand)
 #CFLAGS += $(call cc-option,-Wconversion,)
 
 ifneq ($(CONFIG_DEBUG),y)
-CFLAGS += $(call cc-option,-Os,$(call cc-option,-O3,))
+CFLAGS += $(call cc-option,-Ofast,$(call cc-option,-Ofast,))
 else
 CFLAGS += $(call cc-option,-g,)
 #CFLAGS += "-D_FORTIFY_SOURCE=2"
 ifeq ($(CONFIG_DEBUG_PESSIMIZE),y)
-CFLAGS += $(call cc-option,-O3,)
+CFLAGS += $(call cc-option,-Ofast,)
 else
-CFLAGS += $(call cc-option,-Os,$(call cc-option,-O3,))
+CFLAGS += $(call cc-option,-Ofast,$(call cc-option,-Ofast,))
 endif
 endif
 ifeq ($(CONFIG_DEBUG_SANITIZE),y)
