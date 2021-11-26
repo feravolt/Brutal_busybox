@@ -641,12 +641,6 @@ extern int vasprintf(char **string_ptr, const char *format, va_list p) FAST_FUNC
 extern ssize_t getline(char **lineptr, size_t *n, FILE *stream) FAST_FUNC;
 #endif
 
-#ifndef HAVE_WAIT3
-/* Wrap wait3() to wait4() for libc implementations without (e.g. Bionic on ANDROID >= 21) */
-# include <sys/wait.h> /* for rusage */
-static pid_t wait3(int* status, int options, struct rusage* rusage) { return wait4(-1, status, options, rusage); }
-#endif
-
 #ifndef HAVE_ISSETUGID
 extern int issetugid(void) FAST_FUNC;
 #endif

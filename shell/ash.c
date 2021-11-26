@@ -14861,8 +14861,8 @@ int ash_main(int argc UNUSED_PARAM, char **argv)
 					INT_ON;
 					hp = lookupvar("HISTFILE");
 				}
-			}
 #endif
+			}
 			if (hp)
 				line_input_state->hist_file = xstrdup(hp);
 # if ENABLE_FEATURE_SH_HISTFILESIZE
