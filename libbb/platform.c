@@ -8,6 +8,7 @@
  */
 #include "libbb.h"
 
+/*
 #ifndef HAVE_STRCHRNUL
 char* FAST_FUNC strchrnul(const char *s, int c)
 {
@@ -16,6 +17,7 @@ char* FAST_FUNC strchrnul(const char *s, int c)
 	return (char*)s;
 }
 #endif
+*/ // ARM64 does have this already per latest NDK
 
 #ifndef HAVE_USLEEP
 int FAST_FUNC usleep(unsigned usec)
