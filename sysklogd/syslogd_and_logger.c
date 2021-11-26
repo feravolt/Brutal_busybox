@@ -11,7 +11,6 @@
 #define SYSLOG_NAMES
 #define SYSLOG_NAMES_CONST
 #include <syslog.h>
-#include <sys/syslog.h>
 
 #if 0
 /* For the record: with SYSLOG_NAMES <syslog.h> defines

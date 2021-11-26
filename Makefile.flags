@@ -60,8 +60,6 @@ CFLAGS += $(call cc-option,-fno-asynchronous-unwind-tables,)
 # No automatic printf->puts,putchar conversions
 # (try disabling this and comparing assembly, it's instructive)
 CFLAGS += $(call cc-option,-fno-builtin-printf,)
-
-# clang-9 does not like "str" + N and "if (CONFIG_ITEM && cond)" constructs
 CFLAGS += $(call cc-option,-Wno-string-plus-int -Wno-constant-logical-operand)
 
 # FIXME: These warnings are at least partially to be concerned about and should
@@ -127,18 +125,18 @@ CFLAGS += --sysroot=$(CONFIG_SYSROOT)
 export SYSROOT=$(CONFIG_SYSROOT)
 endif
 
+# libm may be needed for dc, awk, ntpd
+LDLIBS += m
 # Android has no separate crypt library
 # gcc-4.2.1 fails if we try to feed C source on stdin:
 #  echo 'int main(void){return 0;}' | $(CC) $(CFLAGS) -lcrypt -o /dev/null -xc -
 # fall back to using a temp file:
-CRYPT_AVAILABLE := $(shell echo 'int main(void){return 0;}' >crypttest.c; $(CC) $(CFLAGS) -lcrypt -o /dev/null crypttest.c >/dev/null 2>&1 && echo "y"; rm crypttest.c)
+CRYPT_AVAILABLE := $(shell echo 'int main(void){return 0;}' >bb_libtest.c; $(CC) $(CFLAGS) -lcrypt -o /dev/null bb_libtest.c >/dev/null 2>&1 && echo "y"; rm bb_libtest.c)
+RT_AVAILABLE    := $(shell echo 'int main(void){return 0;}' >bb_libtest.c; $(CC) $(CFLAGS) -lrt    -o /dev/null bb_libtest.c >/dev/null 2>&1 && echo "y"; rm bb_libtest.c)
 ifeq ($(CRYPT_AVAILABLE),y)
-LDLIBS += m crypt
-else
-LDLIBS += m
+LDLIBS += crypt
 endif
-# libm may be needed for dc, awk, ntpd
-# librt may be needed for clock_gettime()
+
 
 # libpam may use libpthread, libdl and/or libaudit.
 # On some platforms that requires an explicit -lpthread, -ldl, -laudit.
@@ -159,11 +157,11 @@ ifeq ($(CONFIG_SELINUX),y)
 SELINUX_PC_MODULES = libselinux libsepol
 $(eval $(call pkg_check_modules,SELINUX,$(SELINUX_PC_MODULES)))
 CPPFLAGS += $(SELINUX_CFLAGS)
-LDLIBS += $($(SELINUX_PC_MODULES:lib%=%))
+LDLIBS += $(if $(SELINUX_LIBS),$(SELINUX_LIBS:-l%=%),$(SELINUX_PC_MODULES:lib%=%))
 endif
 
 ifeq ($(CONFIG_FEATURE_NSLOOKUP_BIG),y)
-ifeq ($(CONFIG_UNAME_OSNAME),Linux)
+ifneq (,$(findstring linux,$(shell $(CC) $(CFLAGS) -dumpmachine)))
 LDLIBS += resolv
 endif
 endif
@@ -190,7 +188,6 @@ ifneq ($(CONFIG_EXTRA_LDFLAGS),)
 LDFLAGS += $(strip $(subst ",,$(CONFIG_EXTRA_LDFLAGS)))
 #"))
 endif
-
 ifneq ($(CONFIG_EXTRA_LDLIBS),)
 LDLIBS += $(strip $(subst ",,$(CONFIG_EXTRA_LDLIBS)))
 #"))

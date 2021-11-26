@@ -63,16 +63,22 @@ static void fprime_select(byte *dst, const byte *zero, const byte *one, byte con
 }
 #endif
 
+#if 0 /* constant-time */
 static void fe_select(byte *dst,
-		   const byte *zero, const byte *one,
-		   byte condition)
+		const byte *src,
+		byte condition)
 {
 	const byte mask = -condition;
 	int i;
 
 	for (i = 0; i < F25519_SIZE; i++)
-		dst[i] = zero[i] ^ (mask & (one[i] ^ zero[i]));
+		dst[i] = dst[i] ^ (mask & (src[i] ^ dst[i]));
 }
+#else
+# define fe_select(dst, src, condition) do { \
+	if (condition) lm_copy(dst, src); \
+} while (0)
+#endif
 
 #if 0 //UNUSED
 static void raw_add(byte *x, const byte *p)
@@ -108,26 +114,26 @@ static void raw_try_sub(byte *x, const byte *p)
 #if 0 //UNUSED
 static int prime_msb(const byte *p)
 {
-    int i;
-    byte x;
-    int shift = 1;
-    int z     = F25519_SIZE - 1;
+	int i;
+	byte x;
+	int shift = 1;
+	int z     = F25519_SIZE - 1;
 
-   /*
-       Test for any hot bits.
-       As soon as one instance is encountered set shift to 0.
-    */
+	/*
+	    Test for any hot bits.
+	    As soon as one instance is encountered set shift to 0.
+	 */
 	for (i = F25519_SIZE - 1; i >= 0; i--) {
-        shift &= ((shift ^ ((-p[i] | p[i]) >> 7)) & 1);
-        z -= shift;
-    }
+		shift &= ((shift ^ ((-p[i] | p[i]) >> 7)) & 1);
+		z -= shift;
+	}
 	x = p[z];
 	z <<= 3;
-    shift = 1;
-    for (i = 0; i < 8; i++) {
-        shift &= ((-(x >> i) | (x >> i)) >> (7 - i) & 1);
-        z += shift;
-    }
+	shift = 1;
+	for (i = 0; i < 8; i++) {
+		shift &= ((-(x >> i) | (x >> i)) >> (7 - i) & 1);
+		z += shift;
+	}
 
 	return z - 1;
 }
@@ -163,11 +169,11 @@ static void fprime_mul(byte *r, const byte *a, const byte *b,
 		const byte bit = (b[i >> 3] >> (i & 7)) & 1;
 		byte plusa[F25519_SIZE];
 
-	    for (j = 0; j < F25519_SIZE; j++) {
-		    c |= ((word16)r[j]) << 1;
-		    r[j] = (byte)c;
-		    c >>= 8;
-	    }
+		for (j = 0; j < F25519_SIZE; j++) {
+			c |= ((word16)r[j]) << 1;
+			r[j] = (byte)c;
+			c >>= 8;
+		}
 		raw_try_sub(r, modulus);
 
 		fprime_copy(plusa, r);
@@ -225,7 +231,7 @@ static void fe_normalize(byte *x)
 	minusp[31] = (byte)c;
 
 	/* Load x-p if no underflow */
-	fe_select(x, minusp, x, (c >> 15) & 1);
+	fe_select(x, minusp, !(c & (1<<15)));
 }
 
 static void lm_add(byte* r, const byte* a, const byte* b)
@@ -315,7 +321,7 @@ static void fe_mul__distinct(byte *r, const byte *a, const byte *b)
 
 		for (; j < F25519_SIZE; j++)
 			c += ((word32)a[j]) *
-			     ((word32)b[i + F25519_SIZE - j]) * 38;
+				((word32)b[i + F25519_SIZE - j]) * 38;
 
 		r[i] = c;
 	}
@@ -474,9 +480,9 @@ static void fe_sqrt(byte *r, const byte *a)
 
 /* Differential addition */
 static void xc_diffadd(byte *x5, byte *z5,
-		       const byte *x1, const byte *z1,
-		       const byte *x2, const byte *z2,
-		       const byte *x3, const byte *z3)
+		const byte *x1, const byte *z1,
+		const byte *x2, const byte *z2,
+		const byte *x3, const byte *z3)
 {
 	/* Explicit formulas database: dbl-1987-m3
 	 *
@@ -516,7 +522,7 @@ static void xc_diffadd(byte *x5, byte *z5,
 
 /* Double an X-coordinate */
 static void xc_double(byte *x3, byte *z3,
-		      const byte *x1, const byte *z1)
+		const byte *x1, const byte *z1)
 {
 	/* Explicit formulas database: dbl-1987-m
 	 *
@@ -544,38 +550,53 @@ static void xc_double(byte *x3, byte *z3,
 	fe_mul_c(z3, x1sq, 4);
 }
 
-void FAST_FUNC curve25519(byte *result, const byte *e, const byte *q)
+static void curve25519(byte *result, const byte *e, const byte *q)
 {
 	int i;
 
-	struct {
+	struct Z {
+		/* for bbox's special case of q == NULL meaning "use basepoint" */
+		/*static const*/ uint8_t basepoint9[CURVE25519_KEYSIZE]; // = {9};
+
 		/* from wolfssl-3.15.3/wolfssl/wolfcrypt/fe_operations.h */
 		/*static const*/ byte f25519_one[F25519_SIZE]; // = {1};
 
-		/* Current point: P_m */
-		byte xm[F25519_SIZE];
-		byte zm[F25519_SIZE]; // = {1};
 		/* Predecessor: P_(m-1) */
 		byte xm1[F25519_SIZE]; // = {1};
 		byte zm1[F25519_SIZE]; // = {0};
+		/* Current point: P_m */
+		byte xm[F25519_SIZE];
+		byte zm[F25519_SIZE]; // = {1};
+		/* Temporaries */
+		byte xms[F25519_SIZE];
+		byte zms[F25519_SIZE];
 	} z;
+	uint8_t *XM1 = (uint8_t*)&z + offsetof(struct Z,xm1); // gcc 11.0.0 workaround
+#define basepoint9 z.basepoint9
 #define f25519_one z.f25519_one
-#define xm         z.xm
-#define zm         z.zm
 #define xm1        z.xm1
 #define zm1        z.zm1
+#define xm         z.xm
+#define zm         z.zm
+#define xms        z.xms
+#define zms        z.zms
 	memset(&z, 0, sizeof(z));
 	f25519_one[0] = 1;
 	zm[0] = 1;
 	xm1[0] = 1;
+
+	if (!q) {
+		basepoint9[0] = 9;
+		q = basepoint9;
+	}
 
 	/* Note: bit 254 is assumed to be 1 */
 	lm_copy(xm, q);
 
 	for (i = 253; i >= 0; i--) {
 		const int bit = (e[i >> 3] >> (i & 7)) & 1;
-		byte xms[F25519_SIZE];
-		byte zms[F25519_SIZE];
+//		byte xms[F25519_SIZE];
+//		byte zms[F25519_SIZE];
 
 		/* From P_m and P_(m-1), compute P_(2m) and P_(2m-1) */
 		xc_diffadd(xm1, zm1, q, f25519_one, xm, zm, xm1, zm1);
@@ -588,14 +609,46 @@ void FAST_FUNC curve25519(byte *result, const byte *e, const byte *q)
 		 *   bit = 1 --> (P_(2m+1), P_(2m))
 		 *   bit = 0 --> (P_(2m), P_(2m-1))
 		 */
-		fe_select(xm1, xm1, xm, bit);
-		fe_select(zm1, zm1, zm, bit);
-		fe_select(xm, xm, xms, bit);
-		fe_select(zm, zm, zms, bit);
+#if 0
+		fe_select(xm1, xm, bit);
+		fe_select(zm1, zm, bit);
+		fe_select(xm, xms, bit);
+		fe_select(zm, zms, bit);
+#else
+// same as above in about 50 bytes smaller code, but
+// requires that in-memory order is exactly xm1,zm1,xm,zm,xms,zms
+		if (bit) {
+			//memcpy(xm1, xm, 4 * F25519_SIZE);
+			//^^^ gcc 11.0.0 warns of overlapping memcpy
+			//memmove(xm1, xm, 4 * F25519_SIZE);
+			//^^^ gcc 11.0.0 warns of out-of-bounds access to xm1[]
+			memmove(XM1, XM1 + 2 * F25519_SIZE, 4 * F25519_SIZE);
+		}
+#endif
 	}
 
 	/* Freeze out of projective coordinates */
 	fe_inv__distinct(zm1, zm);
 	fe_mul__distinct(result, zm1, xm);
 	fe_normalize(result);
+}
+
+/* interface to bbox's TLS code: */
+
+void FAST_FUNC curve_x25519_compute_pubkey_and_premaster(
+		uint8_t *pubkey, uint8_t *premaster,
+		const uint8_t *peerkey32)
+{
+	uint8_t privkey[CURVE25519_KEYSIZE]; //[32]
+
+	/* Generate random private key, see RFC 7748 */
+	tls_get_random(privkey, sizeof(privkey));
+	privkey[0] &= 0xf8;
+	privkey[CURVE25519_KEYSIZE-1] = ((privkey[CURVE25519_KEYSIZE-1] & 0x7f) | 0x40);
+
+	/* Compute public key */
+	curve25519(pubkey, privkey, NULL /* "use base point of x25519" */);
+
+	/* Compute premaster using peer's public key */
+	curve25519(premaster, privkey, peerkey32);
 }

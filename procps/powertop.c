@@ -505,7 +505,7 @@ static void cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
 				unsigned int *edx)
 {
 	/* EAX value specifies what information to return */
-	__asm__(
+	asm (
 		"	pushl %%ebx\n"     /* Save EBX */
 		"	cpuid\n"
 		"	movl %%ebx, %1\n"  /* Save content of EBX */
@@ -818,7 +818,7 @@ int powertop_main(int argc UNUSED_PARAM, char UNUSED_PARAM **argv)
 
 		for (i = 0; i < MAX_CSTATE_COUNT + 2; i++)
 			if (cstate_lines[i][0])
-				fputs(cstate_lines[i], stdout);
+				fputs_stdout(cstate_lines[i]);
 
 		i = process_timer_stats();
 #if ENABLE_FEATURE_POWERTOP_PROCIRQ

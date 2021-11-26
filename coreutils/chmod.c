@@ -26,12 +26,13 @@
 //usage:#define chmod_trivial_usage
 //usage:       "[-R"IF_DESKTOP("cvf")"] MODE[,MODE]... FILE..."
 //usage:#define chmod_full_usage "\n\n"
-//usage:       "Each MODE is one or more of the letters ugoa, one of the\n"
-//usage:       "symbols +-= and one or more of the letters rwxst\n"
+//usage:       "MODE is octal number (bit pattern sstrwxrwxrwx) or [ugoa]{+|-|=}[rwxXst]"
+//usage:     "\n"
+//next 4 options are the same for chmod/chown/chgrp:
 //usage:     "\n	-R	Recurse"
 //usage:	IF_DESKTOP(
 //usage:     "\n	-c	List changed files"
-//usage:     "\n	-v	List all files"
+//usage:     "\n	-v	Verbose"
 //usage:     "\n	-f	Hide errors"
 //usage:	)
 //usage:
@@ -87,10 +88,12 @@ static int FAST_FUNC fileAction(struct recursive_state *state,
 
 	if (chmod(fileName, newmode) == 0) {
 		if (OPT_VERBOSE
-		 || (OPT_CHANGED && statbuf->st_mode != newmode)
+		 || (OPT_CHANGED
+		     && (statbuf->st_mode & 07777) != (newmode & 07777))
 		) {
+			char modestr[12];
 			printf("mode of '%s' changed to %04o (%s)\n", fileName,
-				newmode & 07777, bb_mode_string(newmode)+1);
+				newmode & 07777, bb_mode_string(modestr, newmode)+1);
 		}
 		return TRUE;
 	}

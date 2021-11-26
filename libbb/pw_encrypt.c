@@ -6,12 +6,9 @@
  *
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
-
 #if !ENABLE_USE_BB_CRYPT
 # if !defined(__FreeBSD__)
-#ifndef __ANDROID__
 #  include <crypt.h>
-#endif
 # endif
 #endif
 #include "libbb.h"

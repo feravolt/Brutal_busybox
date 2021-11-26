@@ -41,7 +41,6 @@
 //applet:IF_NAMEIF(APPLET_NOEXEC(nameif, nameif, BB_DIR_SBIN, BB_SUID_DROP, nameif))
 
 //kbuild:lib-$(CONFIG_NAMEIF) += nameif.o
-//kbuild:lib-$(CONFIG_NAMEIF) += ether_aton_r.o
 
 //usage:#define nameif_trivial_usage
 //usage:	IF_NOT_FEATURE_NAMEIF_EXTENDED(
@@ -53,10 +52,10 @@
 //usage:#define nameif_full_usage "\n\n"
 //usage:	"Rename network interface while it in the down state."
 //usage:	IF_NOT_FEATURE_NAMEIF_EXTENDED(
-//usage:     "\nThe device with address HWADDR is renamed to IFACE."
+//usage:     "\nThe device with address HWADDR is renamed to IFNAME."
 //usage:	)
 //usage:	IF_FEATURE_NAMEIF_EXTENDED(
-//usage:     "\nThe device matched by SELECTOR is renamed to IFACE."
+//usage:     "\nThe device matched by SELECTOR is renamed to IFNAME."
 //usage:     "\nSELECTOR can be a combination of:"
 //usage:     "\n	driver=STRING"
 //usage:     "\n	bus=STRING"

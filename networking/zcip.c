@@ -59,7 +59,6 @@
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <linux/sockios.h>
-#include "struct-etherarp.h"
 
 #include <syslog.h>
 

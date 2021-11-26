@@ -11,8 +11,6 @@
 #include <netinet/in.h>
 #include <net/if.h>
 #include <sys/un.h>
-#include <netdb.h>
-#include "../libres/dietdns.h"
 #if ENABLE_IFPLUGD || ENABLE_FEATURE_MDEV_DAEMON || ENABLE_UEVENT
 # include <linux/netlink.h>
 #endif
@@ -117,27 +115,19 @@ void FAST_FUNC xconnect(int s, const struct sockaddr *s_addr, socklen_t addrlen)
 
 /* Return port number for a service.
  * If "port" is a number use it as the port.
- * If "port" is a name it is looked up in /etc/services,
- * if it isnt found return default_port
+ * If "port" is a name it is looked up in /etc/services.
+ * if NULL, return default_port
  */
-unsigned FAST_FUNC bb_lookup_port(const char *port, const char *protocol, unsigned default_port)
+unsigned FAST_FUNC bb_lookup_port(const char *port, const char *protocol, unsigned port_nr)
 {
-	unsigned port_nr = default_port;
 	if (port) {
-		int old_errno;
-
-		/* Since this is a lib function, we're not allowed to reset errno to 0.
-		 * Doing so could break an app that is deferring checking of errno. */
-		old_errno = errno;
 		port_nr = bb_strtou(port, NULL, 10);
 		if (errno || port_nr > 65535) {
 			struct servent *tserv = getservbyname(port, protocol);
-			port_nr = default_port;
-			if (tserv)
-				port_nr = ntohs(tserv->s_port);
-//FIXME: else: port string was garbage, but we don't report that???
+			if (!tserv)
+				bb_error_msg_and_die("bad port '%s'", port);
+			port_nr = ntohs(tserv->s_port);
 		}
-		errno = old_errno;
 	}
 	return (uint16_t)port_nr;
 }
@@ -241,7 +231,7 @@ IF_NOT_FEATURE_IPV6(sa_family_t af = AF_INET;)
 		cp++; /* skip ':' */
 		port = bb_strtou(cp, NULL, 10);
 		if (errno || (unsigned)port > 0xffff) {
-			bb_error_msg("bad port spec '%s'", org_host);
+			bb_error_msg("bad port '%s'", cp);
 			if (ai_flags & DIE_ON_ERROR)
 				xfunc_die();
 			return NULL;
@@ -287,7 +277,7 @@ IF_NOT_FEATURE_IPV6(sa_family_t af = AF_INET;)
 	 * for each possible socket type (tcp,udp,raw...): */
 	hint.ai_socktype = SOCK_STREAM;
 	hint.ai_flags = ai_flags & ~DIE_ON_ERROR;
-	rc = getaddrinfo(host, NULL, &hint, &result); /* hack to use dietlibc's resolver to work around static compile issue */
+	rc = getaddrinfo(host, NULL, &hint, &result);
 	if (rc || !result) {
 		bb_error_msg("bad address '%s'", org_host);
 		if (ai_flags & DIE_ON_ERROR)
@@ -314,7 +304,7 @@ IF_NOT_FEATURE_IPV6(sa_family_t af = AF_INET;)
 	set_nport(&r->u.sa, htons(port));
  ret:
 	if (result)
-		freeaddrinfo(result); /* hack to use dietlibc's resolver to work around static compile issue */
+		freeaddrinfo(result);
 	return r;
 }
 #if !ENABLE_FEATURE_IPV6

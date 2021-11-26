@@ -38,13 +38,27 @@ struct dhcp_packet {
 #define BROADCAST_FLAG 0x8000 /* "I need broadcast replies" */
 	uint32_t ciaddr; /* client IP (if client is in BOUND, RENEW or REBINDING state) */
 	uint32_t yiaddr; /* 'your' (client) IP address */
-	/* IP address of next server to use in bootstrap, returned in DHCPOFFER, DHCPACK by server */
+	/* IP address of "next server" (usually meant to be an TFTP server)
+	 * to use in bootstrap, returned in DHCPOFFER, DHCPACK by server: */
 	uint32_t siaddr_nip;
-	uint32_t gateway_nip; /* aka 'giaddr': relay agent IP address */
+	/* RFC 951 (BOOTP): "place my (server) IP address in the 'siaddr' field"
+	 * (IOW: unconditionally, not just if we are also a TFTP server).
+	 * DHCP servers don't have to do this, they add SERVER_ID option
+	 * to their reply packets to let client identify lease-giving server.
+	 */
+	uint32_t gateway_nip; /* aka 'giaddr': relay agent IP address, else 0 */
 	uint8_t chaddr[16];   /* link-layer client hardware address (MAC) */
 	uint8_t sname[64];    /* server host name (ASCIZ) */
+	/* RFC 951 (BOOTP): "If the client wishes to restrict booting
+	 * to a particular server name, it may place [it] in 'sname'"
+	 */
 	uint8_t file[128];    /* boot file name (ASCIZ) */
-	uint32_t cookie;      /* fixed first four option bytes (99,130,83,99 dec) */
+	/* RFC 951 (BOOTP): in client requests, "...can be a 'generic' name
+	 * such as 'unix' or 'gateway'; this means 'boot the named program
+	 * configured for my machine'"
+	 */
+	/* BOOTP fields end here, BOOTP says optional uint8_t vend[64] follows */
+	uint32_t cookie;      /* DHCP magic bytes: 99,130,83,99 decimal */
 	uint8_t options[DHCP_OPTIONS_BUFSIZE + CONFIG_UDHCPC_SLACK_FOR_BUGGY_SERVERS];
 };
 #define DHCP_PKT_SNAME_LEN      64
@@ -142,18 +156,21 @@ struct dhcp_scan_state {
 //#define DHCP_NTP_SERVER       0x2a
 //#define DHCP_WINS_SERVER      0x2c
 #define DHCP_REQUESTED_IP       0x32 /* 50: sent by client if specific IP is wanted */
-#define DHCP_LEASE_TIME         0x33 /* 51: */
-#define DHCP_OPTION_OVERLOAD    0x34 /* 52: */
-#define DHCP_MESSAGE_TYPE       0x35 /* 53: */
+#define DHCP_LEASE_TIME         0x33 /* 51: 32bit big-endian */
+#define DHCP_OPTION_OVERLOAD    0x34 /* 52: 1 byte */
+#define DHCP_MESSAGE_TYPE       0x35 /* 53: 1 byte */
 #define DHCP_SERVER_ID          0x36 /* 54: server's IP */
 #define DHCP_PARAM_REQ          0x37 /* 55: list of options client wants */
 //#define DHCP_ERR_MESSAGE      0x38 /* 56: error message when sending NAK etc */
-#define DHCP_MAX_SIZE           0x39 /* 57: */
+#define DHCP_MAX_SIZE           0x39 /* 57: 16bit big-endian */
+//                              0x3a /* 58: from server: renew time, 32bit big-endian */
+//                              0x3b /* 59: from server: rebind time, 32bit big-endian */
 #define DHCP_VENDOR             0x3c /* 60: client's vendor (a string) */
 #define DHCP_CLIENT_ID          0x3d /* 61: by default client's MAC addr, but may be arbitrarily long */
 //#define DHCP_TFTP_SERVER_NAME 0x42 /* 66: same as 'sname' field */
 //#define DHCP_BOOT_FILE        0x43 /* 67: same as 'file' field */
 //#define DHCP_USER_CLASS       0x4d /* 77: RFC 3004. set of LASCII strings. "I am a printer" etc */
+//                              0x50 /* 80: rapid commit ("I'm ok with getting immediate ACK, not just OFFER"), 0 bytes */
 #define DHCP_FQDN               0x51 /* 81: client asks to update DNS to map its FQDN to its new IP */
 //#define DHCP_PCODE            0x64 /* 100: RFC 4833. IEEE 1003.1 TZ string */
 //#define DHCP_TCODE            0x65 /* 101: RFC 4833. Reference to the TZ database string */
@@ -275,7 +292,8 @@ struct option_set *udhcp_find_option(struct option_set *opt_list, uint8_t code) 
 # define IF_UDHCP_VERBOSE(...) __VA_ARGS__
 extern unsigned dhcp_verbose;
 # define log1(...) do { if (dhcp_verbose >= 1) bb_info_msg(__VA_ARGS__); } while (0)
-# define log1s(msg) do { if (dhcp_verbose >= 1) bb_simple_info_msg(msg); } while (0)
+//# define log1s(msg) do { if (dhcp_verbose >= 1) bb_simple_info_msg(msg); } while (0)
+void log1s(const char *msg) FAST_FUNC;
 # if CONFIG_UDHCP_DEBUG >= 2
 void udhcp_dump_packet(struct dhcp_packet *packet) FAST_FUNC;
 #  define log2(...) do { if (dhcp_verbose >= 2) bb_info_msg(__VA_ARGS__); } while (0)
@@ -303,22 +321,20 @@ void udhcp_dump_packet(struct dhcp_packet *packet) FAST_FUNC;
 # define log3s(msg) ((void)0)
 #endif
 
-#if defined(__mips__)
-/*
- * The 'simple' message functions have a negative impact on the size of the
- * DHCP code when compiled for MIPS, so don't use them in this case.
- */
-#define bb_simple_info_msg bb_info_msg
-#define bb_simple_error_msg bb_error_msg
-#define bb_simple_perror_msg_and_die bb_perror_msg_and_die
-#undef log1s
-#define log1s log1
-#endif
-
 /*** Other shared functions ***/
 
 /* 2nd param is "uint32_t*" */
 int FAST_FUNC udhcp_str2nip(const char *str, void *arg);
+
+#if !ENABLE_UDHCPC6
+#define udhcp_insert_new_option(opt_list, code, length, dhcpv6) \
+	udhcp_insert_new_option(opt_list, code, length)
+#endif
+void* FAST_FUNC udhcp_insert_new_option(struct option_set **opt_list,
+		unsigned code,
+		unsigned length,
+		bool dhcpv6);
+
 /* 2nd param is "struct option_set**" */
 #if !ENABLE_UDHCPC6
 #define udhcp_str2optset(str, arg, optflags, option_strings, dhcpv6) \

@@ -28,6 +28,22 @@
 # ifndef PR_GET_NAME
 # define PR_GET_NAME 16
 # endif
+# if ENABLE_FEATURE_SH_STANDALONE || ENABLE_FEATURE_PREFER_APPLETS || !BB_MMU
+int FAST_FUNC re_execed_comm(void)
+{
+	const char *e, *expected_comm;
+	char comm[16];
+
+	BUILD_BUG_ON(CONFIG_BUSYBOX_EXEC_PATH[0] != '/');
+	e = CONFIG_BUSYBOX_EXEC_PATH;
+	/* Hopefully (strrchr(e) - e) evaluates to constant at compile time: */
+	expected_comm = bb_busybox_exec_path + (strrchr(e, '/') - e) + 1;
+
+	prctl(PR_GET_NAME, (long)comm, 0, 0, 0);
+	//bb_error_msg("comm:'%.*s' expected:'%s'", 16, comm, expected_comm);
+	return strcmp(comm, expected_comm) == 0;
+}
+# endif
 void FAST_FUNC set_task_comm(const char *comm)
 {
 	/* okay if too long (truncates) */
@@ -109,8 +125,13 @@ int FAST_FUNC run_nofork_applet(int applet_no, char **argv)
 		char *tmp_argv[argc+1];
 		memcpy(tmp_argv, argv, (argc+1) * sizeof(tmp_argv[0]));
 		applet_name = tmp_argv[0];
+
+		/* longjmp's (instead of returning) if --help is seen */
+		show_usage_if_dash_dash_help(applet_no, argv);
+
 		/* Finally we can call NOFORK applet's main() */
 		rc = applet_main[applet_no](argc, tmp_argv);
+
 		/* Important for shells: `which CMD` was failing */
 		fflush_all();
 	} else {

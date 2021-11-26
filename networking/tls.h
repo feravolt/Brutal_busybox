@@ -26,7 +26,7 @@
 #undef  USE_SEED
 /* pstm: multiprecision numbers */
 #undef  DISABLE_PSTM
-#if defined(__GNUC__) && defined(__i386__) && !defined(__ANDROID__)
+#if defined(__GNUC__) && defined(__i386__)
   /* PSTM_X86 works correctly. +25 bytes. */
 # define PSTM_32BIT
 # define PSTM_X86
@@ -101,8 +101,22 @@ void xorbuf_aligned_AES_BLOCK_SIZE(void* buf, const void* mask) FAST_FUNC;
 
 
 #include "tls_pstm.h"
-#include "tls_symmetric.h"
 #include "tls_aes.h"
 #include "tls_aesgcm.h"
 #include "tls_rsa.h"
-#include "tls_fe.h"
+
+#define EC_CURVE_KEYSIZE   32
+#define P256_KEYSIZE       32
+#define CURVE25519_KEYSIZE 32
+
+void curve_x25519_compute_pubkey_and_premaster(
+		uint8_t *pubkey32, uint8_t *premaster32,
+		const uint8_t *peerkey32) FAST_FUNC;
+
+void curve_P256_compute_pubkey_and_premaster(
+		uint8_t *pubkey2x32, uint8_t *premaster32,
+		const uint8_t *peerkey2x32) FAST_FUNC;
+
+void curve_P256_compute_pubkey_and_premaster_NEW(
+		uint8_t *pubkey2x32, uint8_t *premaster32,
+		const uint8_t *peerkey2x32) FAST_FUNC;

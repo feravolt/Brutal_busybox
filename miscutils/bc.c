@@ -5,7 +5,7 @@
  * Original code copyright (c) 2018 Gavin D. Howard and contributors.
  */
 //TODO:
-// maybe implement a^b for non-integer b?
+// maybe implement a^b for non-integer b? (see zbc_num_p())
 
 #define DEBUG_LEXER   0
 #define DEBUG_COMPILE 0
@@ -108,14 +108,14 @@
 
 //See www.gnu.org/software/bc/manual/bc.html
 //usage:#define bc_trivial_usage
-//usage:       "[-sqlw] FILE..."
+//usage:       "[-sqlw] [FILE]..."
 //usage:
 //usage:#define bc_full_usage "\n"
 //usage:     "\nArbitrary precision calculator"
 //usage:     "\n"
 ///////:     "\n	-i	Interactive" - has no effect for now
 //usage:     "\n	-q	Quiet"
-//usage:     "\n	-l	Load standard math library"
+//usage:     "\n	-l	Load standard library"
 //usage:     "\n	-s	Be POSIX compatible"
 //usage:     "\n	-w	Warn if extensions are used"
 ///////:     "\n	-v	Version"
@@ -138,11 +138,54 @@
 //usage:
 //usage:#define dc_full_usage "\n"
 //usage:     "\nTiny RPN calculator. Operations:"
-//usage:     "\n+, -, *, /, %, ~, ^," IF_FEATURE_DC_BIG(" |,")
+//usage:     "\nArithmetic: + - * / % ^"
+//usage:	IF_FEATURE_DC_BIG(
+//usage:     "\n~ - divide with remainder"
+//usage:     "\n| - modular exponentiation"
+//usage:     "\nv - square root"
+////////     "\nA-F -                   digits 10..15
+////////     "\n_NNN -                  push negative number -NNN
+////////     "\n[string] -              push string (in FreeBSD, \[, \] and \\ are escapes, not implemented here and in GNU)
+////////     "\nR - DC_LEX_POP          pop and discard
+////////     "\nc - DC_LEX_CLEAR_STACK  clear stack
+////////     "\nd - DC_LEX_DUPLICATE    duplicate top-of-stack
+////////     "\nr - DC_LEX_SWAP         swap top-of-stack
+////////     "\n:r - DC_LEX_COLON       pop index, pop value, store to array 'r'
+////////     "\n;r - DC_LEX_SCOLON      pop index, fetch from array 'r', push
+////////     "\nLr - DC_LEX_LOAD_POP    pop register 'r', push
+////////     "\nSr - DC_LEX_STORE_PUSH  pop, push to register 'r'
+////////     "\nlr - DC_LEX_LOAD        read register 'r', push
+////////     "\nsr - DC_LEX_OP_ASSIGN   pop, assign to register 'r'
+////////     "\n? - DC_LEX_READ         read line and execute
+////////     "\nx - DC_LEX_EXECUTE      pop string and execute
+////////     "\n<r - XC_LEX_OP_REL_GT   pop, pop, execute register 'r' if top-of-stack was less
+////////     "\n>r - XC_LEX_OP_REL_LT   pop, pop, execute register 'r' if top-of-stack was greater
+////////     "\n=r - XC_LEX_OP_REL_EQ   pop, pop, execute register 'r' if equal
+////////     "\n                        !<r !>r !=r - negated forms
+////////     "\n                        >tef - "if greater execute register 't' else execute 'f'"
+////////     "\nQ - DC_LEX_NQUIT        pop, "break N" from macro invocations
+////////     "\nq - DC_LEX_QUIT         "break 2" (if less than 2 levels of macros, exit dc)
+////////     "\nX - DC_LEX_SCALE_FACTOR pop, push number of fractional digits
+////////     "\nZ - DC_LEX_LENGTH       pop, push number of digits it has (or number of characters in string)
+////////     "\na - DC_LEX_ASCIIFY      pop, push low-order byte as char or 1st char of string
+////////     "\n( - DC_LEX_LPAREN       (FreeBSD, not in GNU) pop, pop, if top-of-stack was less push 1 else push 0
+////////     "\n{ - DC_LEX_LBRACE       (FreeBSD, not in GNU) pop, pop, if top-of-stack was less-or-equal push 1 else push 0
+////////     "\nG - DC_LEX_EQ_NO_REG    (FreeBSD, not in GNU) pop, pop, if equal push 1 else push 0
+////////     "\nN - DC_LEX_OP_BOOL_NOT  (FreeBSD, not in GNU) pop, if 0 push 1 else push 0
+////////                                FreeBSD also has J and M commands, used internally by bc
+////////     "\nn - DC_LEX_PRINT_POP    pop, print without newline
+////////     "\nP - DC_LEX_PRINT_STREAM pop, print string or hex bytes
+//usage:	)
 //usage:     "\np - print top of the stack without popping"
 //usage:     "\nf - print entire stack"
-//usage:     "\nk - pop the value and set the precision"
+////////     "\nz - DC_LEX_STACK_LEVEL  push stack depth
+////////     "\nK - DC_LEX_SCALE        push precision
+////////     "\nI - DC_LEX_IBASE        push input radix
+////////     "\nO - DC_LEX_OBASE        push output radix
+//usage:	IF_FEATURE_DC_BIG(
+//usage:     "\nk - pop the value and set precision"
 //usage:     "\ni - pop the value and set input radix"
+//usage:	)
 //usage:     "\no - pop the value and set output radix"
 //usage:     "\nExamples: dc -e'2 2 + p' -> 4, dc -e'8 8 * 2 2 + / p' -> 16"
 //usage:
@@ -1343,6 +1386,12 @@ static void bc_num_copy(BcNum *d, BcNum *s)
 	}
 }
 
+static void bc_num_init_and_copy(BcNum *d, BcNum *s)
+{
+	bc_num_init(d, s->len);
+	bc_num_copy(d, s);
+}
+
 static BC_STATUS zbc_num_ulong_abs(BcNum *n, unsigned long *result_p)
 {
 	size_t i;
@@ -1942,11 +1991,8 @@ static FAST_FUNC BC_STATUS zbc_num_m(BcNum *a, BcNum *b, BcNum *restrict c, size
 	scale = BC_MIN(a->rdx + b->rdx, scale);
 	maxrdx = BC_MAX(maxrdx, scale);
 
-	bc_num_init(&cpa, a->len);
-	bc_num_init(&cpb, b->len);
-
-	bc_num_copy(&cpa, a);
-	bc_num_copy(&cpb, b);
+	bc_num_init_and_copy(&cpa, a);
+	bc_num_init_and_copy(&cpb, b);
 	cpa.neg = cpb.neg = false;
 
 	s = zbc_num_shift(&cpa, maxrdx);
@@ -2109,12 +2155,16 @@ static FAST_FUNC BC_STATUS zbc_num_p(BcNum *a, BcNum *b, BcNum *restrict c, size
 	BcNum copy;
 	unsigned long pow;
 	size_t i, powrdx, resrdx;
+	size_t a_rdx;
 	bool neg;
 
 	// GNU bc does not allow 2^2.0 - we do
 	for (i = 0; i < b->rdx; i++)
 		if (b->num[i] != 0)
 			RETURN_STATUS(bc_error("not an integer"));
+
+// a^b for non-integer b (for a>0) can be implemented as exp(ln(a)*b).
+// Possibly better precision would be given by a^int(b) * exp(ln(a)*frac(b)).
 
 	if (b->len == 0) {
 		bc_num_one(c);
@@ -2137,18 +2187,31 @@ static FAST_FUNC BC_STATUS zbc_num_p(BcNum *a, BcNum *b, BcNum *restrict c, size
 	if (s) RETURN_STATUS(s);
 	// b is not used beyond this point
 
-	bc_num_init(&copy, a->len);
-	bc_num_copy(&copy, a);
+	bc_num_init_and_copy(&copy, a);
+	a_rdx = a->rdx; // pull it into a CPU register (hopefully)
+	// a is not used beyond this point
 
 	if (!neg) {
-		if (a->rdx > scale)
-			scale = a->rdx;
-		if (a->rdx * pow < scale)
-			scale = a->rdx * pow;
+		unsigned long new_scale;
+		if (a_rdx > scale)
+			scale = a_rdx;
+		new_scale = a_rdx * pow;
+		// Don't fall for multiplication overflow. Example:
+		// 0.01^2147483648 a_rdx:2 pow:0x80000000, 32bit mul is 0.
+//not that it matters with current algorithm, it would OOM on such large powers,
+//but it can be improved to detect zero results etc. Example: with scale=0,
+//result of 0.01^N for any N>1 is 0: 0.01^2 = 0.0001 ~= 0.00 (trunc to scale)
+//then this would matter:
+		// if a_rdx != 0 and new_scale < pow, we had overflow,
+		// correct "new_scale" value is larger than ULONG_MAX,
+		// thus larger than any possible current value of "scale",
+		// thus "scale = new_scale" should not be done:
+		if (a_rdx == 0 || new_scale >= pow)
+			if (new_scale < scale)
+				scale = new_scale;
 	}
 
-
-	for (powrdx = a->rdx; !(pow & 1); pow >>= 1) {
+	for (powrdx = a_rdx; !(pow & 1); pow >>= 1) {
 		powrdx <<= 1;
 		s = zbc_num_mul(&copy, &copy, &copy, powrdx);
 		if (s) goto err;
@@ -2198,7 +2261,7 @@ static FAST_FUNC BC_STATUS zbc_num_p(BcNum *a, BcNum *b, BcNum *restrict c, size
 }
 #define zbc_num_p(...) (zbc_num_p(__VA_ARGS__) COMMA_SUCCESS)
 
-static BC_STATUS zbc_num_sqrt(BcNum *a, BcNum *restrict b, size_t scale)
+static NOINLINE BC_STATUS zbc_num_sqrt(BcNum *a, BcNum *restrict b, size_t scale)
 {
 	BcStatus s;
 	BcNum num1, num2, half, f, fprime, *x0, *x1, *temp;
@@ -2450,8 +2513,7 @@ static void bc_array_copy(BcVec *d, const BcVec *s)
 	dnum = (void*)d->v;
 	snum = (void*)s->v;
 	for (i = 0; i < s->len; i++, dnum++, snum++) {
-		bc_num_init(dnum, snum->len);
-		bc_num_copy(dnum, snum);
+		bc_num_init_and_copy(dnum, snum);
 	}
 }
 
@@ -2465,8 +2527,7 @@ static void dc_result_copy(BcResult *d, BcResult *src)
 		case XC_RESULT_IBASE:
 		case XC_RESULT_SCALE:
 		case XC_RESULT_OBASE:
-			bc_num_init(&d->d.n, src->d.n.len);
-			bc_num_copy(&d->d.n, &src->d.n);
+			bc_num_init_and_copy(&d->d.n, &src->d.n);
 			break;
 		case XC_RESULT_VAR:
 		case XC_RESULT_ARRAY:
@@ -5568,11 +5629,10 @@ static BC_STATUS zxc_num_printNum(BcNum *n, unsigned base_t, size_t width, BcNum
 	}
 
 	bc_vec_init(&stack, sizeof(long), NULL);
-	bc_num_init(&intp, n->len);
+	bc_num_init_and_copy(&intp, n);
 	bc_num_init(&fracp, n->rdx);
 	bc_num_init(&digit, width);
 	bc_num_init(&frac_len, BC_NUM_INT(n));
-	bc_num_copy(&intp, n);
 	bc_num_one(&frac_len);
 	base.cap = ARRAY_SIZE(base_digs);
 	base.num = base_digs;
@@ -5741,8 +5801,7 @@ static BC_STATUS zxc_program_negate(void)
 	s = zxc_program_prep(&ptr, &num);
 	if (s) RETURN_STATUS(s);
 
-	bc_num_init(&res.d.n, num->len);
-	bc_num_copy(&res.d.n, num);
+	bc_num_init_and_copy(&res.d.n, num);
 	if (res.d.n.len) res.d.n.neg = !res.d.n.neg;
 
 	xc_program_retire(&res, XC_RESULT_TEMP);
@@ -5981,8 +6040,7 @@ static BC_STATUS zxc_program_assign(char inst)
 		s = BC_STATUS_SUCCESS;
 	}
 
-	bc_num_init(&res.d.n, l->len);
-	bc_num_copy(&res.d.n, l);
+	bc_num_init_and_copy(&res.d.n, l);
 	xc_program_binOpRetire(&res);
 
 	RETURN_STATUS(s);
@@ -6079,8 +6137,7 @@ static BC_STATUS zbc_program_incdec(char inst)
 
 	if (inst == BC_INST_INC_POST || inst == BC_INST_DEC_POST) {
 		copy.t = XC_RESULT_TEMP;
-		bc_num_init(&copy.d.n, num->len);
-		bc_num_copy(&copy.d.n, num);
+		bc_num_init_and_copy(&copy.d.n, num);
 	}
 
 	res.t = BC_RESULT_ONE;
@@ -6182,8 +6239,7 @@ static BC_STATUS zbc_program_return(char inst)
 
 		s = zxc_program_num(operand, &num);
 		if (s) RETURN_STATUS(s);
-		bc_num_init(&res.d.n, num->len);
-		bc_num_copy(&res.d.n, num);
+		bc_num_init_and_copy(&res.d.n, num);
 		bc_vec_pop(&G.prog.results);
 	} else {
 		if (f->voidfunc)
@@ -6217,13 +6273,20 @@ static unsigned long xc_program_len(BcNum *n)
 {
 	size_t len = n->len;
 
-	if (n->rdx != len) return len;
+	if (n->rdx != len)
+		// length(100): rdx 0 len 3, return 3
+		// length(0.01-0.01): rdx 2 len 0, return 2
+		// dc: 0.01 0.01 - Zp: rdx 2 len 0, return 1
+		return len != 0 ? len : (IS_BC ? n->rdx : 1);
+
+	// length(0): return 1
+	// length(0.000nnn): count nnn
 	for (;;) {
 		if (len == 0) break;
 		len--;
 		if (n->num[len] != 0) break;
 	}
-	return len;
+	return len + 1;
 }
 
 static BC_STATUS zxc_program_builtin(char inst)
@@ -6251,12 +6314,12 @@ static BC_STATUS zxc_program_builtin(char inst)
 	if (inst == XC_INST_SQRT)
 		s = zbc_num_sqrt(num, &res.d.n, G.prog.scale);
 #if ENABLE_BC
-	else if (len != 0 && opnd->t == XC_RESULT_ARRAY) {
+	else if (len && opnd->t == XC_RESULT_ARRAY) {
 		bc_num_ulong2num(&res.d.n, (unsigned long) ((BcVec *) num)->len);
 	}
 #endif
 #if ENABLE_DC
-	else if (len != 0 && !BC_PROG_NUM(opnd, num)) {
+	else if (len && !BC_PROG_NUM(opnd, num)) {
 		char **str;
 		size_t idx = opnd->t == XC_RESULT_STR ? opnd->d.id.idx : num->rdx;
 
@@ -6265,6 +6328,8 @@ static BC_STATUS zxc_program_builtin(char inst)
 	}
 #endif
 	else {
+//TODO: length(.00) and scale(.00) should return 2, they return 1 and 0 now
+//(don't forget to check that dc Z and X commands do not break)
 		bc_num_ulong2num(&res.d.n, len ? xc_program_len(num) : xc_program_scale(num));
 	}
 
@@ -6448,7 +6513,7 @@ static BC_STATUS zdc_program_printStream(void)
 		char *str;
 		idx = (r->t == XC_RESULT_STR) ? r->d.id.idx : n->rdx;
 		str = *xc_program_str(idx);
-		fputs(str, stdout);
+		fputs_stdout(str);
 	}
 
 	RETURN_STATUS(s);

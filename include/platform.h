@@ -124,7 +124,7 @@
  * (-DFAST_FUNC= )
  */
 #ifndef FAST_FUNC
-# if !defined(__ANDROID__) && __GNUC_PREREQ(3,0) && defined(i386)
+# if __GNUC_PREREQ(3,0) && defined(i386)
 /* stdcall makes callee to pop arguments from stack, not caller */
 #  define FAST_FUNC __attribute__((regparm(3),stdcall))
 /* #elif ... - add your favorite arch today! */
@@ -195,6 +195,7 @@
 #endif
 
 #if ULONG_MAX > 0xffffffff
+/* inline 64-bit bswap only on 64-bit arches */
 # define bb_bswap_64(x) bswap_64(x)
 #endif
 
@@ -407,6 +408,7 @@ typedef unsigned smalluint;
 #define HAVE_SETBIT 1
 #define HAVE_SIGHANDLER_T 1
 #define HAVE_STPCPY 1
+#define HAVE_STPNCPY 1
 #define HAVE_MEMPCPY 1
 #define HAVE_STRCASESTR 1
 #define HAVE_STRCHRNUL 1
@@ -424,7 +426,8 @@ typedef unsigned smalluint;
 #define HAVE_SYS_STATFS_H 1
 #define HAVE_PRINTF_PERCENTM 1
 #define HAVE_WAIT3 1
-#define HAVE_ISSETUGID 1
+#define HAVE_DEV_FD 1
+#define DEV_FD_PREFIX "/dev/fd/"
 
 #if defined(__UCLIBC__)
 # if UCLIBC_VERSION < KERNEL_VERSION(0, 9, 32)
@@ -444,6 +447,7 @@ typedef unsigned smalluint;
 # undef HAVE_MKDTEMP
 # undef HAVE_SETBIT
 # undef HAVE_STPCPY
+# undef HAVE_STPNCPY
 # undef HAVE_STRCASESTR
 # undef HAVE_STRCHRNUL
 # undef HAVE_STRSEP
@@ -516,6 +520,7 @@ typedef unsigned smalluint;
 
 #if defined(__digital__) && defined(__unix__)
 # undef HAVE_STPCPY
+# undef HAVE_STPNCPY
 #endif
 
 #if defined(ANDROID) || defined(__ANDROID__)
@@ -528,14 +533,13 @@ typedef unsigned smalluint;
 # else
    /* ANDROID >= 21 has standard dprintf */
 # endif
-# if __ANDROID_API__ > 18
-#  undef HAVE_ISSETUGID
-# endif
 # if __ANDROID_API__ < 21
 #  undef HAVE_TTYNAME_R
 #  undef HAVE_GETLINE
 #  undef HAVE_STPCPY
-# else
+#  undef HAVE_STPNCPY
+# endif
+# if __ANDROID_API__ >= 21
 #  undef HAVE_WAIT3
 # endif
 # undef HAVE_MEMPCPY
@@ -544,7 +548,6 @@ typedef unsigned smalluint;
 # undef HAVE_UNLOCKED_LINE_OPS
 # undef HAVE_NET_ETHERNET_H
 # undef HAVE_PRINTF_PERCENTM
-# undef HAVE_SETBIT
 #endif
 
 /*
@@ -580,6 +583,10 @@ typedef void (*sighandler_t)(int);
 
 #ifndef HAVE_STPCPY
 extern char *stpcpy(char *p, const char *to_add) FAST_FUNC;
+#endif
+
+#ifndef HAVE_STPNCPY
+extern char *stpncpy(char *p, const char *to_add, size_t n) FAST_FUNC;
 #endif
 
 #ifndef HAVE_MEMPCPY
@@ -623,16 +630,6 @@ extern int vasprintf(char **string_ptr, const char *format, va_list p) FAST_FUNC
 # include <stdio.h> /* for FILE */
 # include <sys/types.h> /* size_t */
 extern ssize_t getline(char **lineptr, size_t *n, FILE *stream) FAST_FUNC;
-#endif
-
-#ifndef HAVE_WAIT3
-/* Wrap wait3() to wait4() for libc implementations without (e.g. Bionic on ANDROID >= 21) */
-# include <sys/wait.h> /* for rusage */
-static pid_t wait3(int* status, int options, struct rusage* rusage) { return wait4(-1, status, options, rusage); }
-#endif
-
-#ifndef HAVE_ISSETUGID
-extern int issetugid(void) FAST_FUNC;
 #endif
 
 #endif

@@ -713,11 +713,16 @@ packet4_ok(int read_len, int seq)
 			up = (struct udphdr *)((char *)hip + hlen);
 			if (hlen + 12 <= read_len
 			 && hip->ip_p == IPPROTO_UDP
-// Off: since we do not form the entire IP packet,
+#if !defined(__FreeBSD__)
+// Disabled source check: since we do not form the entire IP packet,
 // but defer it to kernel, we can't set source port,
 // and thus can't check it here in the reply
+			/* && up->source == ident */
+			 && up->dest == htons(port + seq)
+#else
 			/* && up->uh_sport == ident */
 			 && up->uh_dport == htons(port + seq)
+#endif
 			) {
 				return (type == ICMP_TIMXCEED ? -1 : code + 1);
 			}
@@ -896,7 +901,7 @@ traceroute_init(int op, char **argv)
 
 	op |= getopt32(argv, "^"
 		OPT_STRING
-		"\0" "-1:x-x" /* minimum 1 arg */
+		"\0" "-1" /* minimum 1 arg */
 		, &tos_str, &device, &max_ttl_str, &port_str, &nprobes_str
 		, &source, &waittime_str, &pausemsecs_str, &first_ttl_str
 	);

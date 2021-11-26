@@ -12,8 +12,8 @@
 # include <libintl.h>
 #else
 # define gettext(Msgid) ((const char *) (Msgid))
-# define textdomain(Domainname)
-# define bindtextdomain(Domainname, Dirname)
+# define textdomain(Domainname) ((const char *) (Domainname))
+# define bindtextdomain(Domainname, Dirname) ((const char *) (Dirname))
 #endif
 
 #ifdef __cplusplus
