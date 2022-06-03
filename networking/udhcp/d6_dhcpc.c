@@ -66,7 +66,7 @@
 
 /* "struct client_data_t client_data" is in bb_common_bufsiz1 */
 
-static const struct dhcp_optflag d6_optflags[] = {
+static const struct dhcp_optflag d6_optflags[] ALIGN2 = {
 #if ENABLE_FEATURE_UDHCPC6_RFC3646
 	{ OPTION_6RD | OPTION_LIST        | OPTION_REQ, D6_OPT_DNS_SERVERS },
 	{ OPTION_DNS_STRING | OPTION_LIST | OPTION_REQ, D6_OPT_DOMAIN_LIST },
@@ -889,7 +889,8 @@ int send_d6_release(struct in6_addr *server_ipv6, struct in6_addr *our_cur_ipv6)
 	if (client6_data.ia_pd)
 		opt_ptr = mempcpy(opt_ptr, client6_data.ia_pd, client6_data.ia_pd->len + 2+2);
 	/* Client-id */
-	ci = udhcp_find_option(client_data.options, D6_OPT_CLIENTID);
+///vda
+	ci = udhcp_find_option(client_data.options, D6_OPT_CLIENTID, /*dhcpv6:*/ 1);
 	if (ci)
 		opt_ptr = mempcpy(opt_ptr, ci->data, D6_OPT_DATA + 2+2 + 6);
 
@@ -1273,7 +1274,7 @@ int udhcpc6_main(int argc UNUSED_PARAM, char **argv)
 	}
 
 	clientid_mac_ptr = NULL;
-	if (!udhcp_find_option(client_data.options, D6_OPT_CLIENTID)) {
+	if (!udhcp_find_option(client_data.options, D6_OPT_CLIENTID, /*dhcpv6:*/ 1)) {
 		/* not set, set the default client ID */
 		clientid_mac_ptr = udhcp_insert_new_option(
 				&client_data.options, D6_OPT_CLIENTID,

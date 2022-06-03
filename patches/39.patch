@@ -1,0 +1,132 @@
+From 9451e5600861a9ffac69acdae6b59616487f6cda Mon Sep 17 00:00:00 2001
+From: FeraVolt <fera.volt@gmail.com>
+Date: Fri, 26 Nov 2021 14:47:11 +0600
+Subject: [PATCH] Resolve conflicts x2
+
+---
+ libbb/missing_syscalls.c     | 15 ---------------
+ libbb/platform.c             |  2 ++
+ libbb/xconnect.c             |  4 ++--
+ networking/interface.c       | 15 ---------------
+ networking/struct-etherarp.h | 14 --------------
+ 5 files changed, 4 insertions(+), 46 deletions(-)
+
+diff --git a/libbb/missing_syscalls.c b/libbb/missing_syscalls.c
+index f02e8d14c..a6db67da9 100644
+--- a/libbb/missing_syscalls.c
++++ b/libbb/missing_syscalls.c
+@@ -54,21 +54,6 @@
+ #if defined(ANDROID) || defined(__ANDROID__)
+ /*# include <linux/timex.h> - for struct timex, but may collide with <time.h> */
+ # include <sys/syscall.h>
+-pid_t getsid(pid_t pid)
+-{
+-	return syscall(__NR_getsid, pid);
+-}
+-
+-int sethostname(const char *name, size_t len)
+-{
+-	return syscall(__NR_sethostname, name, len);
+-}
+-
+-struct timex;
+-int adjtimex(struct timex *buf)
+-{
+-	return syscall(__NR_adjtimex, buf);
+-}
+ 
+ int pivot_root(const char *new_root, const char *put_old)
+ {
+diff --git a/libbb/platform.c b/libbb/platform.c
+index b652a2112..6f1db9939 100644
+--- a/libbb/platform.c
++++ b/libbb/platform.c
+@@ -8,6 +8,7 @@
+  */
+ #include "libbb.h"
+ 
++/*
+ #ifndef HAVE_STRCHRNUL
+ char* FAST_FUNC strchrnul(const char *s, int c)
+ {
+@@ -16,6 +17,7 @@ char* FAST_FUNC strchrnul(const char *s, int c)
+ 	return (char*)s;
+ }
+ #endif
++*/ // ARM64 does have this already per latest NDK
+ 
+ #ifndef HAVE_USLEEP
+ int FAST_FUNC usleep(unsigned usec)
+diff --git a/libbb/xconnect.c b/libbb/xconnect.c
+index 2116c0b6f..03773036b 100644
+--- a/libbb/xconnect.c
++++ b/libbb/xconnect.c
+@@ -279,7 +279,7 @@ IF_NOT_FEATURE_IPV6(sa_family_t af = AF_INET;)
+ 	 * for each possible socket type (tcp,udp,raw...): */
+ 	hint.ai_socktype = SOCK_STREAM;
+ 	hint.ai_flags = ai_flags & ~DIE_ON_ERROR;
+-	rc = diet_getaddrinfo(host, NULL, &hint, &result); /* hack to use dietlibc's resolver to work around static compile issue */
++	rc = getaddrinfo(host, NULL, &hint, &result); /* hack to use dietlibc's resolver to work around static compile issue */
+ 	if (rc || !result) {
+ 		bb_error_msg("bad address '%s'", org_host);
+ 		if (ai_flags & DIE_ON_ERROR)
+@@ -306,7 +306,7 @@ IF_NOT_FEATURE_IPV6(sa_family_t af = AF_INET;)
+ 	set_nport(&r->u.sa, htons(port));
+  ret:
+ 	if (result)
+-		diet_freeaddrinfo(result); /* hack to use dietlibc's resolver to work around static compile issue */
++		freeaddrinfo(result); /* hack to use dietlibc's resolver to work around static compile issue */
+ 	return r;
+ }
+ #if !ENABLE_FEATURE_IPV6
+diff --git a/networking/interface.c b/networking/interface.c
+index 6f0716680..dbab87cec 100644
+--- a/networking/interface.c
++++ b/networking/interface.c
+@@ -53,21 +53,6 @@
+ #define _PATH_PROCNET_DEV               "/proc/net/dev"
+ #define _PATH_PROCNET_IFINET6           "/proc/net/if_inet6"
+ 
+-#ifdef HAVE_AFINET6
+-# ifndef _LINUX_IN6_H
+-#  ifndef __BIONIC__
+-/*
+- * This is from linux/include/net/ipv6.h
+- */
+-struct in6_ifreq {
+-	struct in6_addr ifr6_addr;
+-	uint32_t ifr6_prefixlen;
+-	unsigned int ifr6_ifindex;
+-};
+-#  endif
+-# endif
+-#endif /* HAVE_AFINET6 */
+-
+ /* Defines for glibc2.0 users. */
+ #ifndef SIOCSIFTXQLEN
+ # define SIOCSIFTXQLEN      0x8943
+diff --git a/networking/struct-etherarp.h b/networking/struct-etherarp.h
+index 02a9c5b23..782b9ff9d 100644
+--- a/networking/struct-etherarp.h
++++ b/networking/struct-etherarp.h
+@@ -51,20 +51,6 @@
+ 	(enaddr)[5] = ((u_int8_t *)ipaddr)[3]; \
+ }
+ 
+-/*
+- * Ethernet Address Resolution Protocol.
+- *
+- * See RFC 826 for protocol description.  Structure below is adapted
+- * to resolving internet addresses.  Field names used correspond to
+- * RFC 826.
+- */
+-struct	ether_arp {
+-	struct	arphdr ea_hdr;		/* fixed-size header */
+-	u_int8_t arp_sha[ETH_ALEN];	/* sender hardware address */
+-	u_int8_t arp_spa[4];		/* sender protocol address */
+-	u_int8_t arp_tha[ETH_ALEN];	/* target hardware address */
+-	u_int8_t arp_tpa[4];		/* target protocol address */
+-};
+ #define	arp_hrd	ea_hdr.ar_hrd
+ #define	arp_pro	ea_hdr.ar_pro
+ #define	arp_hln	ea_hdr.ar_hln

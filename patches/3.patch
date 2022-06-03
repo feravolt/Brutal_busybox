@@ -1,0 +1,30 @@
+From 2eacbd32b0641e611dd3b4acb02a21a495390bbd Mon Sep 17 00:00:00 2001
+From: Chris Renshaw <osm0sis@outlook.com>
+Date: Thu, 3 Dec 2015 11:19:25 -0400
+Subject: [PATCH] fix swapon, swapoff: comment out MNTOPT_NOAUTO
+
+Patch modified by Tias Guns <tias@ulyssis.org> from 'swap-on-off' by Dan Drown
+"syscalls for swapon/swapoff and defines"
+http://dan.drown.org/android/src/busybox/
+Rebased for busybox 1.24.1 by Chris Renshaw <osm0sis@outlook.com>
+---
+ util-linux/swaponoff.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/util-linux/swaponoff.c b/util-linux/swaponoff.c
+index e2ff4b5cc..829a58e23 100644
+--- a/util-linux/swaponoff.c
++++ b/util-linux/swaponoff.c
+@@ -239,7 +239,11 @@ static int do_em_all_in_fstab(void)
+ 			/* swapon -a should ignore entries with noauto,
+ 			 * but swapoff -a should process them
+ 			 */
+-			if (do_swapoff || hasmntopt(m, MNTOPT_NOAUTO) == NULL) {
++			if (do_swapoff
++#ifdef MNTOPT_NOAUTO
++			|| hasmntopt(m, MNTOPT_NOAUTO) == NULL
++#endif
++			) {
+ 				/* each swap space might have different flags */
+ 				/* save global flags for the next round */
+ 				save_g_flags();

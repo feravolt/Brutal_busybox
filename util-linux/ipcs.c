@@ -601,15 +601,15 @@ int ipcs_main(int argc UNUSED_PARAM, char **argv)
 		id = xatoi(opt_i);
 		if (opt & flag_shm) {
 			print_shm(id);
-			fflush_stdout_and_exit(EXIT_SUCCESS);
+			fflush_stdout_and_exit_SUCCESS();
 		}
 		if (opt & flag_sem) {
 			print_sem(id);
-			fflush_stdout_and_exit(EXIT_SUCCESS);
+			fflush_stdout_and_exit_SUCCESS();
 		}
 		if (opt & flag_msg) {
 			print_msg(id);
-			fflush_stdout_and_exit(EXIT_SUCCESS);
+			fflush_stdout_and_exit_SUCCESS();
 		}
 		bb_show_usage();
 	}
@@ -634,5 +634,5 @@ int ipcs_main(int argc UNUSED_PARAM, char **argv)
 		do_sem(format);
 		bb_putchar('\n');
 	}
-	fflush_stdout_and_exit(EXIT_SUCCESS);
+	fflush_stdout_and_exit_SUCCESS();
 }

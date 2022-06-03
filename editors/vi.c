@@ -224,6 +224,7 @@
 
 #endif
 
+#define isbackspace(c) ((c) == term_orig.c_cc[VERASE] || (c) == 8 || (c) == 127)
 
 enum {
 	MAX_TABSTOP = 32, // sanity limit
@@ -342,6 +343,7 @@ struct globals {
 	int last_modified_count; // = -1;
 	int cmdline_filecnt;     // how many file names on cmd line
 	int cmdcnt;              // repetition count
+	char *rstart;            // start of text in Replace mode
 	unsigned rows, columns;	 // the terminal screen is this size
 #if ENABLE_FEATURE_VI_ASK_TERMINAL
 	int get_rowcol_error;
@@ -474,6 +476,7 @@ struct globals {
 #define last_modified_count     (G.last_modified_count)
 #define cmdline_filecnt         (G.cmdline_filecnt    )
 #define cmdcnt                  (G.cmdcnt             )
+#define rstart                  (G.rstart             )
 #define rows                    (G.rows               )
 #define columns                 (G.columns            )
 #define crow                    (G.crow               )
@@ -1122,7 +1125,7 @@ static int readit(void) // read (maybe cursor) key from stdin
 	// on nonblocking stdin.
 	// Note: read_key sets errno to 0 on success.
  again:
-	c = read_key(STDIN_FILENO, readbuffer, /*timeout:*/ -1);
+	c = safe_read_key(STDIN_FILENO, readbuffer, /*timeout:*/ -1);
 	if (c == -1) { // EOF/error
 		if (errno == EAGAIN) // paranoia
 			goto again;
@@ -1212,12 +1215,13 @@ static char *get_input_line(const char *prompt)
 		c = get_one_char();
 		if (c == '\n' || c == '\r' || c == 27)
 			break;		// this is end of input
-		if (c == term_orig.c_cc[VERASE] || c == 8 || c == 127) {
+		if (isbackspace(c)) {
 			// user wants to erase prev char
-			write1("\b \b"); // erase char on screen
 			buf[--i] = '\0';
+			go_bottom_and_clear_to_eol();
 			if (i <= 0) // user backs up before b-o-l, exit
 				break;
+			write1(buf);
 		} else if (c > 0 && c < 256) { // exclude Unicode
 			// (TODO: need to handle Unicode)
 			buf[i] = c;
@@ -2174,8 +2178,16 @@ static char *char_insert(char *p, char c, int undo) // insert the char c at 'p'
 			p += 1 + stupid_insert(p, ' ');
 		}
 #endif
-	} else if (c == term_orig.c_cc[VERASE] || c == 8 || c == 127) { // Is this a BS
-		if (p > text) {
+	} else if (isbackspace(c)) {
+		if (cmd_mode == 2) {
+			// special treatment for backspace in Replace mode
+			if (p > rstart) {
+				p--;
+#if ENABLE_FEATURE_VI_UNDO
+				undo_pop();
+#endif
+			}
+		} else if (p > text) {
 			p--;
 			p = text_hole_delete(p, p, ALLOW_UNDO_QUEUED);	// shrink buffer 1 char
 		}
@@ -3703,9 +3715,9 @@ static void do_cmd(int c)
 			undo_queue_commit();
 		} else {
 			if (1 <= c || Isprint(c)) {
-				if (c != 27)
-					dot = yank_delete(dot, dot, PARTIAL, YANKDEL, ALLOW_UNDO);	// delete char
-				dot = char_insert(dot, c, ALLOW_UNDO_CHAIN);	// insert new char
+				if (c != 27 && !isbackspace(c))
+					dot = yank_delete(dot, dot, PARTIAL, YANKDEL, ALLOW_UNDO);
+				dot = char_insert(dot, c, ALLOW_UNDO_CHAIN);
 			}
 			goto dc1;
 		}
@@ -4264,6 +4276,7 @@ static void do_cmd(int c)
  dc5:
 		cmd_mode = 2;
 		undo_queue_commit();
+		rstart = dot;
 		break;
 	case KEYCODE_DELETE:
 		if (dot < end - 1)
@@ -4770,7 +4783,7 @@ static void edit_file(char *fn)
 		uint64_t k;
 		write1(ESC"[999;999H" ESC"[6n");
 		fflush_all();
-		k = read_key(STDIN_FILENO, readbuffer, /*timeout_ms:*/ 100);
+		k = safe_read_key(STDIN_FILENO, readbuffer, /*timeout_ms:*/ 100);
 		if ((int32_t)k == KEYCODE_CURSOR_POS) {
 			uint32_t rc = (k >> 32);
 			columns = (rc & 0x7fff);

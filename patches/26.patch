@@ -1,0 +1,22 @@
+From ba717f98b70d576172cbc39525fb88d19d64429c Mon Sep 17 00:00:00 2001
+From: John Wu <topjohnwu@gmail.com>
+Date: Sun, 12 Aug 2018 18:31:26 +0800
+Subject: [PATCH] platform: minor adjustments to support unified headers
+
+---
+ include/platform.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/platform.h b/include/platform.h
+index 941d8e5bc..8d3b61f01 100644
+--- a/include/platform.h
++++ b/include/platform.h
+@@ -124,7 +124,7 @@
+  * (-DFAST_FUNC= )
+  */
+ #ifndef FAST_FUNC
+-# if __GNUC_PREREQ(3,0) && defined(i386)
++# if !defined(__ANDROID__) && __GNUC_PREREQ(3,0) && defined(i386)
+ /* stdcall makes callee to pop arguments from stack, not caller */
+ #  define FAST_FUNC __attribute__((regparm(3),stdcall))
+ /* #elif ... - add your favorite arch today! */

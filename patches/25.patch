@@ -1,0 +1,79 @@
+From 43f34f19ca3fe7fcaf5f44bc4e309868dd703694 Mon Sep 17 00:00:00 2001
+From: Chris Renshaw <osm0sis@outlook.com>
+Date: Fri, 2 Feb 2018 16:37:54 -0400
+Subject: [PATCH] fix time+hush: add missing definitions on Android API 21+
+
+wait3() wrapper from 'sys-wait.h.patch' by Fredrik Fornwall:
+https://github.com/termux/termux-packages/tree/master/ndk_patches/
+
+issetugid is required for hush via glob.c; add the hacky pre-API 21 definition back
+---
+ include/platform.h | 15 +++++++++++++++
+ libbb/platform.c   |  8 ++++++++
+ networking/route.c |  1 +
+ 3 files changed, 24 insertions(+)
+
+diff --git a/include/platform.h b/include/platform.h
+index 668b50df4..941d8e5bc 100644
+--- a/include/platform.h
++++ b/include/platform.h
+@@ -533,11 +533,16 @@ typedef unsigned smalluint;
+ # else
+    /* ANDROID >= 21 has standard dprintf */
+ # endif
++# if __ANDROID_API__ > 18
++#  undef HAVE_ISSETUGID
++# endif
+ # if __ANDROID_API__ < 21
+ #  undef HAVE_TTYNAME_R
+ #  undef HAVE_GETLINE
+ #  undef HAVE_STPCPY
+ #  undef HAVE_STPNCPY
++# else
++#  undef HAVE_WAIT3
+ # endif
+ # if __ANDROID_API__ >= 21
+ #  undef HAVE_WAIT3
+@@ -633,4 +638,14 @@ extern int vasprintf(char **string_ptr, const char *format, va_list p) FAST_FUNC
+ extern ssize_t getline(char **lineptr, size_t *n, FILE *stream) FAST_FUNC;
+ #endif
+ 
++#ifndef HAVE_WAIT3
++/* Wrap wait3() to wait4() for libc implementations without (e.g. Bionic on ANDROID >= 21) */
++# include <sys/wait.h> /* for rusage */
++static pid_t wait3(int* status, int options, struct rusage* rusage) { return wait4(-1, status, options, rusage); }
++#endif
++
++#ifndef HAVE_ISSETUGID
++extern int issetugid(void) FAST_FUNC;
++#endif
++
+ #endif
+diff --git a/libbb/platform.c b/libbb/platform.c
+index 7913353e2..b652a2112 100644
+--- a/libbb/platform.c
++++ b/libbb/platform.c
+@@ -225,3 +225,11 @@ int ttyname_r(int fd, char *buf, size_t buflen)
+ 	return 0;
+ }
+ #endif
++
++#ifndef HAVE_ISSETUGID
++int issetugid(void)
++{
++	/* for Bionic, this is sufficient */
++	return 0;
++}
++#endif
+diff --git a/networking/route.c b/networking/route.c
+index 89617db9d..80a89fb1b 100644
+--- a/networking/route.c
++++ b/networking/route.c
+@@ -34,6 +34,7 @@
+ 
+ //kbuild:lib-$(CONFIG_ROUTE) += route.o
+ 
++#include <netinet/in.h>
+ #include <net/route.h>
+ #include <net/if.h>
+ #include <linux/in6.h>

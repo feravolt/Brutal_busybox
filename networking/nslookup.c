@@ -36,6 +36,8 @@
 
 #include <resolv.h>
 #include <net/if.h>	/* for IFNAMSIZ */
+//#include <arpa/inet.h>
+//#include <netdb.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include "../libres/dietdns.h"

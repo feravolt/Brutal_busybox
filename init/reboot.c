@@ -27,7 +27,7 @@ int reboot_android(int argc, char *argv[])
     else
         asprintf(&prop_value, "%s", restart_cmd);
 
-    asprintf(&prop_cmd, "setprop sys.powerctl %s", prop_value);
+    asprintf(&prop_cmd, "svc power %s", prop_value);
     ret = execlp("sh", "sh", "-c", prop_cmd, NULL);
     return ret;
 }

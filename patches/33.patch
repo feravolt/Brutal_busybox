@@ -1,0 +1,23 @@
+From 39555824dc8b9cdd0c1d4e99fb79a76d292fa521 Mon Sep 17 00:00:00 2001
+From: Chris Renshaw <osm0sis@outlook.com>
+Date: Sun, 22 Jul 2018 02:23:16 -0300
+Subject: [PATCH] ftpd/pw_encrypt: fix glibc include on Android
+
+---
+ libbb/pw_encrypt.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/libbb/pw_encrypt.c b/libbb/pw_encrypt.c
+index 3463fd95b..b2bdcf128 100644
+--- a/libbb/pw_encrypt.c
++++ b/libbb/pw_encrypt.c
+@@ -8,7 +8,9 @@
+  */
+ #if !ENABLE_USE_BB_CRYPT
+ # if !defined(__FreeBSD__)
++#ifndef __ANDROID__
+ #  include <crypt.h>
++#endif
+ # endif
+ #endif
+ #include "libbb.h"

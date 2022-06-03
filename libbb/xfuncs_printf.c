@@ -91,12 +91,9 @@ char* FAST_FUNC xstrdup(const char *s)
 
 // Die if we can't allocate n+1 bytes (space for the null terminator) and copy
 // the (possibly truncated to length n) string into it.
-char* FAST_FUNC xstrndup(const char *s, int n)
+char* FAST_FUNC xstrndup(const char *s, size_t n)
 {
 	char *t;
-
-	if (ENABLE_DEBUG && s == NULL)
-		bb_simple_error_msg_and_die("xstrndup bug");
 
 	t = strndup(s, n);
 
@@ -106,7 +103,7 @@ char* FAST_FUNC xstrndup(const char *s, int n)
 	return t;
 }
 
-void* FAST_FUNC xmemdup(const void *s, int n)
+void* FAST_FUNC xmemdup(const void *s, size_t n)
 {
 	return memcpy(xmalloc(n), s, n);
 }
@@ -418,11 +415,18 @@ void FAST_FUNC xseteuid(uid_t euid)
 	if (seteuid(euid)) bb_simple_perror_msg_and_die("seteuid");
 }
 
+int FAST_FUNC chdir_or_warn(const char *path)
+{
+	int r = chdir(path);
+	if (r != 0)
+		bb_perror_msg("can't change directory to '%s'", path);
+	return r;
+}
 // Die if we can't chdir to a new path.
 void FAST_FUNC xchdir(const char *path)
 {
-	if (chdir(path))
-		bb_perror_msg_and_die("can't change directory to '%s'", path);
+	if (chdir_or_warn(path) != 0)
+		xfunc_die();
 }
 
 void FAST_FUNC xfchdir(int fd)

@@ -1,0 +1,47 @@
+From 13095cf9d427146b8004d3d161090e83e0b366eb Mon Sep 17 00:00:00 2001
+From: FeraVolt <fera.volt@gmail.com>
+Date: Fri, 26 Nov 2021 17:35:14 +0600
+Subject: [PATCH] Target os12 for 64 bit, add polly opts & misc
+
+---
+ Makefile.flags                | 2 +-
+ configs/fde_arm7_defconfig    | 2 +-
+ configs/fera_arm7_defconfig   | 2 +-
+ configs/fera_arm8_defconfig   | 2 +-
+ configs/fera_x86_64_defconfig | 2 +-
+ configs/fera_x86_defconfig    | 2 +-
+ include/platform.h            | 6 ------
+ shell/ash.c                   | 2 +-
+ 8 files changed, 7 insertions(+), 13 deletions(-)
+
+diff --git a/include/platform.h b/include/platform.h
+index 8d3b61f01..47209dfb1 100644
+--- a/include/platform.h
++++ b/include/platform.h
+@@ -638,12 +638,6 @@ extern int vasprintf(char **string_ptr, const char *format, va_list p) FAST_FUNC
+ extern ssize_t getline(char **lineptr, size_t *n, FILE *stream) FAST_FUNC;
+ #endif
+ 
+-#ifndef HAVE_WAIT3
+-/* Wrap wait3() to wait4() for libc implementations without (e.g. Bionic on ANDROID >= 21) */
+-# include <sys/wait.h> /* for rusage */
+-static pid_t wait3(int* status, int options, struct rusage* rusage) { return wait4(-1, status, options, rusage); }
+-#endif
+-
+ #ifndef HAVE_ISSETUGID
+ extern int issetugid(void) FAST_FUNC;
+ #endif
+diff --git a/shell/ash.c b/shell/ash.c
+index 9bfcb04ef..84f9f5e18 100644
+--- a/shell/ash.c
++++ b/shell/ash.c
+@@ -14705,8 +14705,8 @@ int ash_main(int argc UNUSED_PARAM, char **argv)
+ 					INT_ON;
+ 					hp = lookupvar("HISTFILE");
+ 				}
+-			}
+ #endif
++			}
+ 			if (hp)
+ 				line_input_state->hist_file = xstrdup(hp);
+ # if ENABLE_FEATURE_SH_HISTFILESIZE

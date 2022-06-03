@@ -313,7 +313,7 @@ typedef long arith_t;
 /* ============ Shell options */
 
 /* If you add/change options hare, update --help text too */
-static const char *const optletters_optnames[] = {
+static const char *const optletters_optnames[] ALIGN_PTR = {
 	"e"   "errexit",
 	"f"   "noglob",
 /* bash has '-o ignoreeof', but no short synonym -I for it */
@@ -664,7 +664,7 @@ raise_exception(int e)
 /*
  * Called when a SIGINT is received.  (If the user specifies
  * that SIGINT is to be trapped or ignored using the trap builtin, then
- * this routine is not called.)  Suppressint is nonzero when interrupts
+ * this routine is not called.)  suppress_int is nonzero when interrupts
  * are held using the INT_OFF macro.  (The test for iflag is just
  * defensive programming.)
  */
@@ -695,13 +695,12 @@ raise_interrupt(void)
 } while (0)
 #endif
 
-static IF_ASH_OPTIMIZE_FOR_SIZE(inline) void
+static IF_NOT_ASH_OPTIMIZE_FOR_SIZE(inline) void
 int_on(void)
 {
 	barrier();
-	if (--suppress_int == 0 && pending_int) {
+	if (--suppress_int == 0 && pending_int)
 		raise_interrupt();
-	}
 }
 #if DEBUG_INTONOFF
 # define INT_ON do { \
@@ -711,7 +710,7 @@ int_on(void)
 #else
 # define INT_ON int_on()
 #endif
-static IF_ASH_OPTIMIZE_FOR_SIZE(inline) void
+static IF_NOT_ASH_OPTIMIZE_FOR_SIZE(inline) void
 force_int_on(void)
 {
 	barrier();
@@ -3680,7 +3679,9 @@ signal_handler(int signo)
 		if (!trap[SIGCHLD])
 			return;
 	}
-
+#if ENABLE_FEATURE_EDITING
+	bb_got_signal = signo; /* for read_line_input: "we got a signal" */
+#endif
 	gotsig[signo - 1] = 1;
 	pending_sig = signo;
 
@@ -5505,7 +5506,7 @@ openhere(union node *redir)
 		ignoresig(SIGTSTP); //signal(SIGTSTP, SIG_IGN);
 		signal(SIGPIPE, SIG_DFL);
 		xwrite(pip[1], p, len);
-		_exit(EXIT_SUCCESS);
+		_exit_SUCCESS();
 	}
  out:
 	close(pip[1]);
@@ -6531,9 +6532,7 @@ exptilde(char *startp, int flag)
 		home = lookupvar("HOME");
 	} else {
 		pw = getpwnam(name);
-		if (pw == NULL)
-			goto lose;
-		home = pw->pw_dir;
+		home = pw ? pw->pw_dir : NULL;
 	}
 	*p = c;
 	if (!home)
@@ -7080,6 +7079,10 @@ subevalvar(char *start, char *str, int strloc,
 				*repl = '\0';
 				break;
 			}
+			if ((unsigned char)*repl == CTLENDVAR) { /* ${v/pattern} (no trailing /, no repl) */
+				repl = NULL;
+				break;
+			}
 			/* Handle escaped slashes, e.g. "${v/\//_}" (they are CTLESC'ed by this point) */
 			if ((unsigned char)*repl == CTLESC && repl[1])
 				repl++;
@@ -7186,7 +7189,13 @@ subevalvar(char *start, char *str, int strloc,
 			len = orig_len - pos;
 
 		if (!quotes) {
-			loc = mempcpy(startp, startp + pos, len);
+			/* want: loc = mempcpy(startp, startp + pos, len)
+			 * but it does not allow overlapping arguments */
+			loc = startp;
+			while (--len >= 0) {
+				*loc = loc[pos];
+				loc++;
+			}
 		} else {
 			for (vstr = startp; pos != 0; pos--) {
 				if ((unsigned char)*vstr == CTLESC)
@@ -10784,23 +10793,52 @@ preadfd(void)
 		line_input_state->path_lookup = pathval();
 # endif
 		reinit_unicode_for_ash();
+ again:
+		/* For shell, LI_INTERRUPTIBLE is set:
+		 * read_line_input will abort on either
+		 * getting EINTR in poll(), or if it sees bb_got_signal != 0
+		 * (IOW: if signal arrives before poll() is reached).
+		 * Interactive testcases:
+		 * (while kill -INT $$; do sleep 1; done) &
+		 * #^^^ prints ^C, prints prompt, repeats
+		 * trap 'echo I' int; (while kill -INT $$; do sleep 1; done) &
+		 * #^^^ prints ^C, prints "I", prints prompt, repeats
+		 * trap 'echo T' term; (while kill $$; do sleep 1; done) &
+		 * #^^^ prints "T", prints prompt, repeats
+		 * #(bash 5.0.17 exits after first "T", looks like a bug)
+		 */
+		bb_got_signal = 0;
+		INT_OFF; /* no longjmp'ing out of read_line_input please */
 		nr = read_line_input(line_input_state, cmdedit_prompt, buf, IBUFSIZ);
+		if (bb_got_signal == SIGINT)
+			write(STDOUT_FILENO, "^C\n", 3);
+		INT_ON; /* here non-blocked SIGINT will longjmp */
 		if (nr == 0) {
 			/* ^C pressed, "convert" to SIGINT */
-			write(STDOUT_FILENO, "^C", 2);
-			raise(SIGINT);
+			write(STDOUT_FILENO, "^C\n", 3);
+			raise(SIGINT); /* here non-blocked SIGINT will longjmp */
+			/* raise(SIGINT) did not work! (e.g. if SIGINT
+			 * is SIG_IGNed on startup, it stays SIG_IGNed)
+			 */
 			if (trap[SIGINT]) {
+ empty_line_input:
 				buf[0] = '\n';
 				buf[1] = '\0';
 				return 1;
 			}
 			exitstatus = 128 + SIGINT;
-			return -1;
+			/* bash behavior on ^C + ignored SIGINT: */
+			goto again;
 		}
 		if (nr < 0) {
 			if (errno == 0) {
-				/* Ctrl+D pressed */
+				/* ^D pressed */
 				nr = 0;
+			}
+			else if (errno == EINTR) { /* got signal? */
+				if (bb_got_signal != SIGINT)
+					write(STDOUT_FILENO, "\n", 1);
+				goto empty_line_input;
 			}
 # if ENABLE_ASH_IDLE_TIMEOUT
 			else if (errno == EAGAIN && timeout > 0) {
@@ -11358,7 +11396,7 @@ options(int *login_sh)
 	int val;
 	int c;
 
-	if (login_sh)
+	if (login_sh != NULL) /* if we came from startup code */
 		minusc = NULL;
 	while ((p = *argptr) != NULL) {
 		c = *p++;
@@ -11369,7 +11407,7 @@ options(int *login_sh)
 		if (c == '-') {
 			val = 1;
 			if (p[0] == '\0' || LONE_DASH(p)) {
-				if (!login_sh) {
+				if (login_sh == NULL) { /* we came from setcmd() */
 					/* "-" means turn off -x and -v */
 					if (p[0] == '\0')
 						xflag = vflag = 0;
@@ -11382,7 +11420,7 @@ options(int *login_sh)
 		}
 		/* first char was + or - */
 		while ((c = *p++) != '\0') {
-			if (login_sh) {
+			if (login_sh != NULL) { /* if we came from startup code */
 				/* bash 3.2 indeed handles -c CMD and +c CMD the same */
 				if (c == 'c') {
 					minusc = p; /* command is after shell args */
@@ -11406,6 +11444,9 @@ options(int *login_sh)
 					if (strcmp(p, "login") == 0) {
 						*login_sh = 1;
 					}
+/* TODO: --noprofile: e.g. if I want to run emergency shell from sulogin,
+ * I want minimal/no shell init scripts - but it insists on running it as "-ash"...
+ */
 					break;
 				}
 			}

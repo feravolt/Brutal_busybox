@@ -1,0 +1,24 @@
+From fbc2f488644296180e0e8bfd942f47f9ce3d568b Mon Sep 17 00:00:00 2001
+From: FeraVolt <fera.volt@gmail.com>
+Date: Fri, 26 Nov 2021 12:36:17 +0600
+Subject: [PATCH] resolving conflicts
+
+---
+ libbb/semctl.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/libbb/semctl.c b/libbb/semctl.c
+index 2c600e4f0..84ab1c92e 100644
+--- a/libbb/semctl.c
++++ b/libbb/semctl.c
+@@ -27,6 +27,10 @@
+ #include <sys/sem.h>
+ #include "libbb.h"
+ 
++#ifndef __NR_semctl
++#define __NR_semctl 66
++#endif
++
+ /* code from GLIBC */
+ int semctl(int semid, int semnum, int cmd, ...) {
+   union semun arg;

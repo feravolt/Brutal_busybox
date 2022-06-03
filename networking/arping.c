@@ -161,7 +161,7 @@ static void finish(void)
 	if (option_mask32 & DAD)
 		exit(!!received);
 	if (option_mask32 & UNSOLICITED)
-		exit(EXIT_SUCCESS);
+		exit_SUCCESS();
 	exit(!received);
 }
 
