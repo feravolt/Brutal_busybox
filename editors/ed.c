@@ -7,7 +7,7 @@
  * The "ed" built-in command (much simplified)
  */
 //config:config ED
-//config:	bool "ed (21 kb)"
+//config:	bool "ed (16 kb)"
 //config:	default y
 //config:	help
 //config:	The original 1970's Unix text editor, from the days of teletypes.
@@ -345,6 +345,8 @@ static int insertLine(int num, const char *data, int len)
 	lp->prev->next = newLp;
 	lp->prev = newLp;
 
+	if (num <= curNum)
+		curLine = curLine->prev;
 	lastNum++;
 	dirty = TRUE;
 	return setCurNum(num);
@@ -720,7 +722,7 @@ static void subCommand(const char *cmd, int num1, int num2)
 		if (deltaLen <= 0) {
 			memcpy(&lp->data[offset], newStr, newLen);
 			if (deltaLen) {
-				memcpy(&lp->data[offset + newLen],
+				memmove(&lp->data[offset + newLen],
 					&lp->data[offset + oldLen],
 					lp->len - offset - oldLen);
 

@@ -64,7 +64,7 @@
  *   filter.  That configuration consumes more power.
  */
 //config:config ETHER_WAKE
-//config:	bool "ether-wake (4.9 kb)"
+//config:	bool "ether-wake (5.2 kb)"
 //config:	default y
 //config:	help
 //config:	Send a magic packet to wake up sleeping machines.
@@ -72,7 +72,6 @@
 //applet:IF_ETHER_WAKE(APPLET_ODDNAME(ether-wake, ether_wake, BB_DIR_USR_SBIN, BB_SUID_DROP, ether_wake))
 
 //kbuild:lib-$(CONFIG_ETHER_WAKE) += ether-wake.o
-//kbuild:lib-$(CONFIG_ETHER_WAKE) += ether_aton_r.o ether_ntoa_r.o
 
 //usage:#define ether_wake_trivial_usage
 //usage:       "[-b] [-i IFACE] [-p aa:bb:cc:dd[:ee:ff]/a.b.c.d] MAC"
@@ -87,7 +86,6 @@
 #include "libbb.h"
 #include <netpacket/packet.h>
 #include <netinet/ether.h>
-#include <netinet/if_ether.h>
 #include <linux/if.h>
 
 /* Note: PF_INET, SOCK_DGRAM, IPPROTO_UDP would allow SIOCGIFHWADDR to
@@ -128,14 +126,13 @@ void bb_debug_dump_packet(unsigned char *outpack, int pktsize)
 static void get_dest_addr(const char *hostid, struct ether_addr *eaddr)
 {
 	struct ether_addr *eap;
-	char ether_buf[20];
 
 	eap = ether_aton_r(hostid, eaddr);
 	if (eap) {
-		bb_debug_msg("The target station address is %s\n\n", ether_ntoa_r(eap, ether_buf));
-#if !defined(__BIONIC__) && (!defined(__UCLIBC__) || UCLIBC_VERSION >= KERNEL_VERSION(0, 9, 30))
+		bb_debug_msg("The target station address is %s\n\n", ether_ntoa(eap));
+#if !defined(__UCLIBC__) || UCLIBC_VERSION >= KERNEL_VERSION(0, 9, 30)
 	} else if (ether_hostton(hostid, eaddr) == 0) {
-		bb_debug_msg("Station address for hostname %s is %s\n\n", hostid, ether_ntoa_r(eaddr, ether_buf));
+		bb_debug_msg("Station address for hostname %s is %s\n\n", hostid, ether_ntoa(eaddr));
 #endif
 	} else {
 		bb_show_usage();

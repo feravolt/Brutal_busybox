@@ -53,6 +53,19 @@
 #define _PATH_PROCNET_DEV               "/proc/net/dev"
 #define _PATH_PROCNET_IFINET6           "/proc/net/if_inet6"
 
+#ifdef HAVE_AFINET6
+# ifndef _LINUX_IN6_H
+/*
+ * This is from linux/include/net/ipv6.h
+ */
+struct in6_ifreq {
+	struct in6_addr ifr6_addr;
+	uint32_t ifr6_prefixlen;
+	unsigned int ifr6_ifindex;
+};
+# endif
+#endif /* HAVE_AFINET6 */
+
 /* Defines for glibc2.0 users. */
 #ifndef SIOCSIFTXQLEN
 # define SIOCSIFTXQLEN      0x8943

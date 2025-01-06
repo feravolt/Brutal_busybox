@@ -28,33 +28,33 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Busyboxed by Denys Vlasenko <vda.linux@googlemail.com> */
 
 //config:config CHPST
-//config:	bool "chpst (9 kb)"
+//config:	bool "chpst (9.2 kb)"
 //config:	default y
 //config:	help
 //config:	chpst changes the process state according to the given options, and
 //config:	execs specified program.
 //config:
 //config:config SETUIDGID
-//config:	bool "setuidgid (4 kb)"
+//config:	bool "setuidgid (4.2 kb)"
 //config:	default y
 //config:	help
 //config:	Sets soft resource limits as specified by options
 //config:
 //config:config ENVUIDGID
-//config:	bool "envuidgid (3.9 kb)"
+//config:	bool "envuidgid (4.1 kb)"
 //config:	default y
 //config:	help
 //config:	Sets $UID to account's uid and $GID to account's gid
 //config:
 //config:config ENVDIR
-//config:	bool "envdir (2.5 kb)"
+//config:	bool "envdir (2.9 kb)"
 //config:	default y
 //config:	help
 //config:	Sets various environment variables as specified by files
 //config:	in the given directory
 //config:
 //config:config SOFTLIMIT
-//config:	bool "softlimit (4.5 kb)"
+//config:	bool "softlimit (4.7 kb)"
 //config:	default y
 //config:	help
 //config:	Sets soft resource limits as specified by options
@@ -466,7 +466,8 @@ int chpst_main(int argc UNUSED_PARAM, char **argv)
 	/* nice should be done before xsetuid */
 	if (opt & OPT_n) {
 		errno = 0;
-		if (nice(xatoi(nicestr)) == -1)
+		nice(xatoi(nicestr));
+		if (errno)
 			bb_simple_perror_msg_and_die("nice");
 	}
 

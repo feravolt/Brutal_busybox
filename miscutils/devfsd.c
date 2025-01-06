@@ -354,10 +354,10 @@ static const char bb_msg_variable_not_found[] ALIGN1 = "variable: %s not found";
 #define simple_info_logger(p, msg)
 #define msg_logger(p, fmt, args...)
 #define simple_msg_logger(p, msg)
-#define msg_logger_and_die(p, fmt, args...)           exit(EXIT_FAILURE)
-#define simple_msg_logger_and_die(p, msg)             exit(EXIT_FAILURE)
+#define msg_logger_and_die(p, fmt, args...)           exit_FAILURE()
+#define simple_msg_logger_and_die(p, msg)             exit_FAILURE()
 #define error_logger(p, fmt, args...)
-#define error_logger_and_die(p, fmt, args...)         exit(EXIT_FAILURE)
+#define error_logger_and_die(p, fmt, args...)         exit_FAILURE()
 #endif
 
 static void safe_memcpy(char *dest, const char *src, int len)
@@ -976,7 +976,7 @@ static void action_compat(const struct devfsd_notify_struct *info, unsigned int 
 				rewind_ = info->devname[info->namelen - 1];
 				if (rewind_ != 'n')
 					rewind_ = '\0';
-				mode=0;
+				mode = 0;
 				if (ptr[2] ==  'l' /*108*/ || ptr[2] == 'm'/*109*/)
 					mode = ptr[2] - 107; /* 1 or 2 */
 				if (ptr[2] ==  'a')
@@ -1595,11 +1595,11 @@ static char *write_old_sd_name(char *buffer,
 		return buffer;
 	}
 	if ((major > 64) && (major < 72)) {
-		disc_index = ((major - 64) << 4) +(minor >> 4);
+		disc_index = ((major - 64) << 4) + (minor >> 4);
 		if (disc_index < 26)
 			sprintf(buffer, "sd%c%s", 'a' + disc_index, part);
 		else
-			sprintf(buffer, "sd%c%c%s", 'a' +(disc_index / 26) - 1, 'a' + disc_index % 26, part);
+			sprintf(buffer, "sd%c%c%s", 'a' + (disc_index / 26) - 1, 'a' + disc_index % 26, part);
 		return buffer;
 	}
 	return NULL;

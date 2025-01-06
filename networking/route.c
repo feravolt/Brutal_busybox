@@ -25,7 +25,7 @@
  * remove ridiculous amounts of bloat.
  */
 //config:config ROUTE
-//config:	bool "route (8.7 kb)"
+//config:	bool "route (9 kb)"
 //config:	default y
 //config:	help
 //config:	Route displays or manipulates the kernel's IP routing tables.
@@ -34,11 +34,8 @@
 
 //kbuild:lib-$(CONFIG_ROUTE) += route.o
 
-#include <netinet/in.h>
 #include <net/route.h>
 #include <net/if.h>
-#include <linux/in6.h>
-#include <linux/ipv6_route.h>
 
 #include "libbb.h"
 #include "inet_common.h"

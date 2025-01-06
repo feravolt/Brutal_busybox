@@ -10,7 +10,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
 //config:config NAMEIF
-//config:	bool "nameif (6.6 kb)"
+//config:	bool "nameif (6.9 kb)"
 //config:	default y
 //config:	select FEATURE_SYSLOG
 //config:	help
@@ -41,7 +41,6 @@
 //applet:IF_NAMEIF(APPLET_NOEXEC(nameif, nameif, BB_DIR_SBIN, BB_SUID_DROP, nameif))
 
 //kbuild:lib-$(CONFIG_NAMEIF) += nameif.o
-//kbuild:lib-$(CONFIG_NAMEIF) += ether_aton_r.o
 
 //usage:#define nameif_trivial_usage
 //usage:	IF_NOT_FEATURE_NAMEIF_EXTENDED(

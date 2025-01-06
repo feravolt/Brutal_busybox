@@ -68,9 +68,6 @@ static const sp_digit p256_mod[8] ALIGNED(8) = {
 
 #define p256_mp_mod ((sp_digit)0x000001)
 
-/* Normalize the values in each word to 32 bits - NOP */
-#define sp_256_norm_8(a) ((void)0)
-
 /* Write r as big endian to byte array.
  * Fixed length number of bytes written: 32
  *
@@ -83,8 +80,6 @@ static void sp_256_to_bin_8(const sp_digit* rr, uint8_t* a)
 	int i;
 	const uint64_t* r = (void*)rr;
 
-	sp_256_norm_8(rr);
-
 	r += 4;
 	for (i = 0; i < 4; i++) {
 		r--;
@@ -96,8 +91,6 @@ static void sp_256_to_bin_8(const sp_digit* rr, uint8_t* a)
 static void sp_256_to_bin_8(const sp_digit* r, uint8_t* a)
 {
 	int i;
-
-	sp_256_norm_8(r);
 
 	r += 8;
 	for (i = 0; i < 8; i++) {
@@ -418,10 +411,10 @@ static void sp_256_sub_8_p256_mod(sp_digit* r)
 "\n		subl	$0xffffffff, (%0)"
 "\n		sbbl	$0xffffffff, 1*4(%0)"
 "\n		sbbl	$0xffffffff, 2*4(%0)"
-"\n		sbbl	$0, 3*4(%0)"
-"\n		sbbl	$0, 4*4(%0)"
-"\n		sbbl	$0, 5*4(%0)"
-"\n		sbbl	$1, 6*4(%0)"
+"\n		sbbl	$0x00000000, 3*4(%0)"
+"\n		sbbl	$0x00000000, 4*4(%0)"
+"\n		sbbl	$0x00000000, 5*4(%0)"
+"\n		sbbl	$0x00000001, 6*4(%0)"
 "\n		sbbl	$0xffffffff, 7*4(%0)"
 "\n"
 		: "=r" (r)
@@ -432,26 +425,45 @@ static void sp_256_sub_8_p256_mod(sp_digit* r)
 #elif ALLOW_ASM && defined(__GNUC__) && defined(__x86_64__)
 static void sp_256_sub_8_p256_mod(sp_digit* r)
 {
+//p256_mod[3..0] = ffffffff00000001 0000000000000000 00000000ffffffff ffffffffffffffff
+# if 0
+	// gcc -Oz bug (?) https://gcc.gnu.org/bugzilla/show_bug.cgi?id=115875
+	// uses buggy "push $-1; pop %rax" insns to load 00000000ffffffff
 	uint64_t reg;
 	uint64_t ooff;
-//p256_mod[3..0] = ffffffff00000001 0000000000000000 00000000ffffffff ffffffffffffffff
 	asm volatile (
-"\n		addq	$1, (%0)"	// adding 1 is the same as subtracting ffffffffffffffff
-"\n		cmc"			// only carry bit needs inverting
-"\n"
-"\n		sbbq	%1, 1*8(%0)"	// %1 holds 00000000ffffffff
-"\n"
-"\n		sbbq	$0, 2*8(%0)"
-"\n"
+"\n		subq	$0xffffffffffffffff, (%0)"
+"\n		sbbq	%1, 1*8(%0)" // %1 = 00000000ffffffff
+"\n		sbbq	$0x0000000000000000, 2*8(%0)"
 "\n		movq	3*8(%0), %2"
-"\n		sbbq	$0, %2"		// adding 00000000ffffffff (in %1)
-"\n		addq	%1, %2"		// is the same as subtracting ffffffff00000001
+"\n		sbbq	$0x0, %2" // subtract carry
+"\n		addq	%1, %2" // adding 00000000ffffffff (in %1)
+"\n"		// is the same as subtracting ffffffff00000001
 "\n		movq	%2, 3*8(%0)"
 "\n"
 		: "=r" (r), "=r" (ooff), "=r" (reg)
-		: "0" (r), "1" (0x00000000ffffffff)
+		: "0" (r), "1" (0x00000000ffffffffUL) /* UL is important! */
 		: "memory"
 	);
+# else // let's do it by hand:
+	uint64_t reg;
+	uint64_t rax;
+	asm volatile (
+"\n		orl	$0xffffffff, %%eax" // %1 (rax) = 00000000ffffffff
+"\n		subq	$0xffffffffffffffff, (%0)"
+"\n		sbbq	%1, 1*8(%0)"
+"\n		sbbq	$0x0000000000000000, 2*8(%0)"
+"\n		movq	3*8(%0), %2"
+"\n		sbbq	$0x0, %2" // subtract carry
+"\n		addq	%1, %2" // adding 00000000ffffffff (in %1)
+"\n"		// is the same as subtracting ffffffff00000001
+"\n		movq	%2, 3*8(%0)"
+"\n"
+		: "=r" (r), "=&a" (rax), "=r" (reg)
+		: "0" (r)
+		: "memory"
+	);
+# endif
 }
 #else
 static void sp_256_sub_8_p256_mod(sp_digit* r)
@@ -483,15 +495,23 @@ static void sp_256to512_mul_8(sp_digit* r, const sp_digit* a, const sp_digit* b)
 ////////////////////////
 //			uint64_t m = ((uint64_t)a[i]) * b[j];
 //			acc_hi:acch:accl += m;
+			long eax_clobbered;
 			asm volatile (
 			// a[i] is already loaded in %%eax
-"\n			mull	%7"
+"\n			mull	%8"
 "\n			addl	%%eax, %0"
 "\n			adcl	%%edx, %1"
-"\n			adcl	$0, %2"
-			: "=rm" (accl), "=rm" (acch), "=rm" (acc_hi)
-			: "0" (accl), "1" (acch), "2" (acc_hi), "a" (a[i]), "m" (b[j])
+"\n			adcl	$0x0, %2"
+			: "=rm" (accl), "=rm" (acch), "=rm" (acc_hi), "=a" (eax_clobbered)
+			: "0"   (accl), "1"   (acch), "2"   (acc_hi), "3"  (a[i]), "m" (b[j])
 			: "cc", "dx"
+// What is "eax_clobbered"? gcc.gnu.org/onlinedocs/gcc/Extended-Asm.html:
+// "Do not modify the contents of input-only operands (except for inputs tied
+// to outputs). The compiler assumes that on exit from the asm statement these
+// operands contain the same values as they had before executing the statement.
+// It is not possible to use clobbers to inform the compiler that the values
+// in these inputs are changing. One common work-around is to tie the changing
+// input variable to an output variable that never gets used."
 			);
 ////////////////////////
 		        j--;
@@ -507,15 +527,20 @@ static void sp_256to512_mul_8(sp_digit* r, const sp_digit* a, const sp_digit* b)
 	const uint64_t* bb = (const void*)b;
 	uint64_t* rr = (void*)r;
 	int k;
-	uint64_t accl;
-	uint64_t acch;
+	register uint64_t accl asm("r8");
+	register uint64_t acch asm("r9");
+	/* ^^^ ask gcc to not use rax/rdx/input arg regs for accumulator variables */
+	/* (or else it may generate lots of silly mov's and even xchg's!) */
 
 	acch = accl = 0;
 	for (k = 0; k < 7; k++) {
-		int i, j;
-		uint64_t acc_hi;
+		unsigned i, j;
+		/* ^^^^^ not signed "int",
+		 * or gcc can use a temp register to sign-extend i,j for aa[i],bb[j] */
+		register uint64_t acc_hi asm("r10");
+		/* ^^^ ask gcc to not use rax/rdx/input arg regs for accumulators */
 		i = k - 3;
-		if (i < 0)
+		if ((int)i < 0)
 			i = 0;
 		j = k - i;
 		acc_hi = 0;
@@ -523,14 +548,15 @@ static void sp_256to512_mul_8(sp_digit* r, const sp_digit* a, const sp_digit* b)
 ////////////////////////
 //			uint128_t m = ((uint128_t)a[i]) * b[j];
 //			acc_hi:acch:accl += m;
+			long rax_clobbered;
 			asm volatile (
 			// aa[i] is already loaded in %%rax
-"\n			mulq	%7"
+"\n			mulq	%8"
 "\n			addq	%%rax, %0"
 "\n			adcq	%%rdx, %1"
-"\n			adcq	$0, %2"
-			: "=rm" (accl), "=rm" (acch), "=rm" (acc_hi)
-			: "0" (accl), "1" (acch), "2" (acc_hi), "a" (aa[i]), "m" (bb[j])
+"\n			adcq	$0x0, %2"
+			: "=rm" (accl), "=rm" (acch), "=rm" (acc_hi), "=a" (rax_clobbered)
+			: "0"   (accl), "1"   (acch), "2"   (acc_hi), "3"  (aa[i]), "m" (bb[j])
 			: "cc", "dx"
 			);
 ////////////////////////
@@ -641,7 +667,6 @@ static void sp_256_div2_8(sp_digit* r /*, const sp_digit* m*/)
 	int carry = 0;
 	if (r[0] & 1)
 		carry = sp_256_add_8(r, r, m);
-	sp_256_norm_8(r);
 	sp_256_rshift1_8(r, carry);
 }
 
@@ -652,10 +677,8 @@ static void sp_256_mont_add_8(sp_digit* r, const sp_digit* a, const sp_digit* b
 //	const sp_digit* m = p256_mod;
 
 	int carry = sp_256_add_8(r, a, b);
-	sp_256_norm_8(r);
 	if (carry) {
 		sp_256_sub_8_p256_mod(r);
-		sp_256_norm_8(r);
 	}
 }
 
@@ -667,10 +690,8 @@ static void sp_256_mont_sub_8(sp_digit* r, const sp_digit* a, const sp_digit* b
 
 	int borrow;
 	borrow = sp_256_sub_8(r, a, b);
-	sp_256_norm_8(r);
 	if (borrow) {
 		sp_256_add_8(r, r, m);
-		sp_256_norm_8(r);
 	}
 }
 
@@ -680,10 +701,8 @@ static void sp_256_mont_dbl_8(sp_digit* r, const sp_digit* a /*, const sp_digit*
 //	const sp_digit* m = p256_mod;
 
 	int carry = sp_256_add_8(r, a, a);
-	sp_256_norm_8(r);
 	if (carry)
 		sp_256_sub_8_p256_mod(r);
-	sp_256_norm_8(r);
 }
 
 /* Triple a Montgomery form number (r = a + a + a % m) */
@@ -692,16 +711,12 @@ static void sp_256_mont_tpl_8(sp_digit* r, const sp_digit* a /*, const sp_digit*
 //	const sp_digit* m = p256_mod;
 
 	int carry = sp_256_add_8(r, a, a);
-	sp_256_norm_8(r);
 	if (carry) {
 		sp_256_sub_8_p256_mod(r);
-		sp_256_norm_8(r);
 	}
 	carry = sp_256_add_8(r, r, a);
-	sp_256_norm_8(r);
 	if (carry) {
 		sp_256_sub_8_p256_mod(r);
-		sp_256_norm_8(r);
 	}
 }
 
@@ -844,7 +859,6 @@ static void sp_512to256_mont_reduce_8(sp_digit* r, sp_digit* aa/*, const sp_digi
 	sp_512to256_mont_shift_8(r, aa);
 	if (carry != 0)
 		sp_256_sub_8_p256_mod(r);
-	sp_256_norm_8(r);
 }
 
 #else /* Generic 32-bit version */
@@ -1003,8 +1017,6 @@ static int sp_256_mul_add_8(sp_digit* r /*, const sp_digit* a, sp_digit b*/)
  * [In our case, it is (p256_mp_mod * a[1]) << 32.]
  * And so on. Eventually T is divisible by R, and after division by R
  * the algorithm is in the same place as the usual Montgomery reduction.
- *
- * TODO: Can conditionally use 64-bit (if bit-little-endian arch) logic?
  */
 static void sp_512to256_mont_reduce_8(sp_digit* r, sp_digit* a/*, const sp_digit* m, sp_digit mp*/)
 {
@@ -1032,7 +1044,6 @@ static void sp_512to256_mont_reduce_8(sp_digit* r, sp_digit* a/*, const sp_digit
 		sp_512to256_mont_shift_8(r, a);
 		if (word16th != 0)
 			sp_256_sub_8_p256_mod(r);
-		sp_256_norm_8(r);
 	}
 	else { /* Same code for explicit mp == 1 (which is always the case for P256) */
 		sp_digit word16th = 0;
@@ -1052,7 +1063,6 @@ static void sp_512to256_mont_reduce_8(sp_digit* r, sp_digit* a/*, const sp_digit
 		sp_512to256_mont_shift_8(r, a);
 		if (word16th != 0)
 			sp_256_sub_8_p256_mod(r);
-		sp_256_norm_8(r);
 	}
 }
 #endif
@@ -1208,14 +1218,12 @@ static void sp_256_map_8(sp_point* r, sp_point* p)
 	/* Reduce x to less than modulus */
 	if (sp_256_cmp_8(r->x, p256_mod) >= 0)
 		sp_256_sub_8_p256_mod(r->x);
-	sp_256_norm_8(r->x);
 
 	/* y /= z^3 */
 	sp_256_mont_mul_and_reduce_8(r->y, p->y, t1 /*, p256_mod, p256_mp_mod*/);
 	/* Reduce y to less than modulus */
 	if (sp_256_cmp_8(r->y, p256_mod) >= 0)
 		sp_256_sub_8_p256_mod(r->y);
-	sp_256_norm_8(r->y);
 
 	memset(r->z, 0, sizeof(r->z));
 	r->z[0] = 1;
@@ -1300,7 +1308,6 @@ static NOINLINE void sp_256_proj_point_add_8(sp_point* r, sp_point* p, sp_point*
 
 	/* Check double */
 	sp_256_sub_8(t1, p256_mod, q->y);
-	sp_256_norm_8(t1);
 	if (sp_256_cmp_equal_8(p->x, q->x)
 	 && sp_256_cmp_equal_8(p->z, q->z)
 	 && (sp_256_cmp_equal_8(p->y, q->y) || sp_256_cmp_equal_8(p->y, t1))
@@ -1422,14 +1429,15 @@ static void sp_256_ecc_mulmod_8(sp_point* r, const sp_point* g, const sp_digit* 
 static void sp_256_ecc_mulmod_base_8(sp_point* r, sp_digit* k /*, int map*/)
 {
 	/* Since this function is called only once, save space:
-	 * don't have "static const sp_point p256_base = {...}",
-	 * it would have more zeros than data.
+	 * don't have "static const sp_point p256_base = {...}".
 	 */
 	static const uint8_t p256_base_bin[] = {
 		/* x (big-endian) */
-		0x6b,0x17,0xd1,0xf2,0xe1,0x2c,0x42,0x47,0xf8,0xbc,0xe6,0xe5,0x63,0xa4,0x40,0xf2,0x77,0x03,0x7d,0x81,0x2d,0xeb,0x33,0xa0,0xf4,0xa1,0x39,0x45,0xd8,0x98,0xc2,0x96,
+		0x6b,0x17,0xd1,0xf2,0xe1,0x2c,0x42,0x47,0xf8,0xbc,0xe6,0xe5,0x63,0xa4,0x40,0xf2,
+		0x77,0x03,0x7d,0x81,0x2d,0xeb,0x33,0xa0,0xf4,0xa1,0x39,0x45,0xd8,0x98,0xc2,0x96,
 		/* y */
-		0x4f,0xe3,0x42,0xe2,0xfe,0x1a,0x7f,0x9b,0x8e,0xe7,0xeb,0x4a,0x7c,0x0f,0x9e,0x16,0x2b,0xce,0x33,0x57,0x6b,0x31,0x5e,0xce,0xcb,0xb6,0x40,0x68,0x37,0xbf,0x51,0xf5,
+		0x4f,0xe3,0x42,0xe2,0xfe,0x1a,0x7f,0x9b,0x8e,0xe7,0xeb,0x4a,0x7c,0x0f,0x9e,0x16,
+		0x2b,0xce,0x33,0x57,0x6b,0x31,0x5e,0xce,0xcb,0xb6,0x40,0x68,0x37,0xbf,0x51,0xf5,
 		/* z will be set to 1, infinity flag to "false" */
 	};
 	sp_point p256_base;

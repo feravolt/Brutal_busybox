@@ -214,7 +214,7 @@ static int prio_print_opt(struct rtattr *opt)
 		return 0;
 	parse_rtattr_nested_compat(tb, TCA_PRIO_MAX, opt, qopt, sizeof(*qopt));
 	printf("bands %u priomap ", qopt->bands);
-	for (i=0; i<=TC_PRIO_MAX; i++)
+	for (i = 0; i <= TC_PRIO_MAX; i++)
 		printf(" %d", qopt->priomap[i]);
 
 	if (tb[TCA_PRIO_MQ])
@@ -502,7 +502,7 @@ int tc_main(int argc UNUSED_PARAM, char **argv)
 	};
 	struct rtnl_handle rth;
 	struct tcmsg msg;
-	int ret, obj, cmd, arg;
+	int obj, cmd, arg;
 	char *dev = NULL;
 
 	INIT_G();
@@ -510,7 +510,6 @@ int tc_main(int argc UNUSED_PARAM, char **argv)
 	if (!*++argv)
 		bb_show_usage();
 	xrtnl_open(&rth);
-	ret = EXIT_SUCCESS;
 
 	obj = index_in_substrings(objects, *argv++);
 	if (obj < 0)
@@ -625,5 +624,5 @@ int tc_main(int argc UNUSED_PARAM, char **argv)
 	if (ENABLE_FEATURE_CLEAN_UP) {
 		rtnl_close(&rth);
 	}
-	return ret;
+	return EXIT_SUCCESS;
 }

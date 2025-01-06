@@ -8,7 +8,6 @@
  */
 #include "libbb.h"
 
-/*
 #ifndef HAVE_STRCHRNUL
 char* FAST_FUNC strchrnul(const char *s, int c)
 {
@@ -17,7 +16,6 @@ char* FAST_FUNC strchrnul(const char *s, int c)
 	return (char*)s;
 }
 #endif
-*/ // ARM64 does have this already per latest NDK
 
 #ifndef HAVE_USLEEP
 int FAST_FUNC usleep(unsigned usec)
@@ -224,14 +222,6 @@ int ttyname_r(int fd, char *buf, size_t buflen)
 	if (r >= buflen)
 		return ERANGE;
 	buf[r] = '\0';
-	return 0;
-}
-#endif
-
-#ifndef HAVE_ISSETUGID
-int issetugid(void)
-{
-	/* for Bionic, this is sufficient */
 	return 0;
 }
 #endif

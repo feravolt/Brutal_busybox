@@ -15,6 +15,7 @@ CPPFLAGS += \
 	-include include/autoconf.h \
 	-D_GNU_SOURCE -DNDEBUG \
 	$(if $(CONFIG_LFS),-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64) \
+	$(if $(CONFIG_TIME64),-D_TIME_BITS=64) \
 	-DBB_VER=$(squote)$(quote)$(BB_VER)$(quote)$(squote)
 
 CFLAGS += $(call cc-option,-Wall,)
@@ -47,12 +48,28 @@ endif
 # gcc 3.x emits bogus "old style proto" warning on find.c:alloc_action()
 CFLAGS += $(call cc-ifversion, -ge, 0400, -Wold-style-definition)
 
+ifneq ($(lastword $(subst -, ,$(CC))),clang)
+# "clang-9: warning: optimization flag '-finline-limit=0' is not supported
+CFLAGS += $(call cc-option,-finline-limit=0,)
+endif
+
 CFLAGS += $(call cc-option,-fno-builtin-strlen -fomit-frame-pointer -ffunction-sections -fdata-sections,)
 # -fno-guess-branch-probability: prohibit pseudo-random guessing
 # of branch probabilities (hopefully makes bloatcheck more stable):
 CFLAGS += $(call cc-option,-fno-guess-branch-probability,)
 CFLAGS += $(call cc-option,-funsigned-char,)
+
+ifeq ($(CONFIG_STATIC_LIBGCC),y)
+# Disable it, for example, if you get
+# "clang-9: warning: argument unused during compilation: '-static-libgcc'"
+CFLAGS += $(call cc-option,-static-libgcc,)
+endif
+
 CFLAGS += $(call cc-option,-falign-functions=1,)
+ifneq ($(lastword $(subst -, ,$(CC))),clang)
+# "clang-9: warning: optimization flag '-falign-jumps=1' is not supported" (and same for other two)
+CFLAGS += $(call cc-option,-falign-jumps=1 -falign-labels=1 -falign-loops=1,)
+endif
 
 # Defeat .eh_frame bloat (gcc 4.6.3 x86-32 defconfig: 20% smaller busybox binary):
 CFLAGS += $(call cc-option,-fno-unwind-tables,)
@@ -60,21 +77,25 @@ CFLAGS += $(call cc-option,-fno-asynchronous-unwind-tables,)
 # No automatic printf->puts,putchar conversions
 # (try disabling this and comparing assembly, it's instructive)
 CFLAGS += $(call cc-option,-fno-builtin-printf,)
+
+# clang-9 does not like "str" + N and "if (CONFIG_ITEM && cond)" constructs
+ifeq ($(lastword $(subst -, ,$(CC))),clang)
 CFLAGS += $(call cc-option,-Wno-string-plus-int -Wno-constant-logical-operand)
+endif
 
 # FIXME: These warnings are at least partially to be concerned about and should
 # be fixed..
 #CFLAGS += $(call cc-option,-Wconversion,)
 
 ifneq ($(CONFIG_DEBUG),y)
-CFLAGS += $(call cc-option,-Ofast,$(call cc-option,-Ofast,))
+CFLAGS += $(call cc-option,-Ofast,$(call cc-option,-Ofast,$(call cc-option,-Ofast,)))
 else
 CFLAGS += $(call cc-option,-g,)
 #CFLAGS += "-D_FORTIFY_SOURCE=2"
 ifeq ($(CONFIG_DEBUG_PESSIMIZE),y)
 CFLAGS += $(call cc-option,-Ofast,)
 else
-CFLAGS += $(call cc-option,-Ofast,$(call cc-option,-Ofast,))
+CFLAGS += $(call cc-option,-Ofast,$(call cc-option,-Ofast,$(call cc-option,-Ofast,)))
 endif
 endif
 ifeq ($(CONFIG_DEBUG_SANITIZE),y)
@@ -136,7 +157,10 @@ RT_AVAILABLE    := $(shell echo 'int main(void){return 0;}' >bb_libtest.c; $(CC)
 ifeq ($(CRYPT_AVAILABLE),y)
 LDLIBS += crypt
 endif
-
+# librt may be needed for clock_gettime()
+ifeq ($(RT_AVAILABLE),y)
+LDLIBS += rt
+endif
 
 # libpam may use libpthread, libdl and/or libaudit.
 # On some platforms that requires an explicit -lpthread, -ldl, -laudit.
@@ -164,6 +188,9 @@ ifeq ($(CONFIG_FEATURE_NSLOOKUP_BIG),y)
 ifneq (,$(findstring linux,$(shell $(CC) $(CFLAGS) -dumpmachine)))
 LDLIBS += resolv
 endif
+ifneq (,$(findstring gnu,$(shell $(CC) $(CFLAGS) -dumpmachine)))
+LDLIBS += resolv
+endif
 endif
 
 ifeq ($(CONFIG_EFENCE),y)
@@ -186,10 +213,6 @@ endif
 
 ifneq ($(CONFIG_EXTRA_LDFLAGS),)
 LDFLAGS += $(strip $(subst ",,$(CONFIG_EXTRA_LDFLAGS)))
-#"))
-endif
-ifneq ($(CONFIG_EXTRA_LDLIBS),)
-LDLIBS += $(strip $(subst ",,$(CONFIG_EXTRA_LDLIBS)))
 #"))
 endif
 

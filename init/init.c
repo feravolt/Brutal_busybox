@@ -500,7 +500,7 @@ static pid_t run(const struct init_action *a)
 
 	/* Open the new terminal device */
 	if (!open_stdio_to_tty(a->terminal))
-		_exit(EXIT_FAILURE);
+		_exit_FAILURE();
 
 	/* NB: on NOMMU we can't wait for input in child, so
 	 * "askfirst" will work the same as "respawn". */
@@ -1106,7 +1106,7 @@ int init_main(int argc UNUSED_PARAM, char **argv)
 
 	/* Make sure environs is set to something sane */
 	putenv((char *) bb_PATH_root_path);
-	putenv((char *) "SHELL=/sbin/sh");
+	putenv((char *) "SHELL=/bin/sh");
 	putenv((char *) "USER=root"); /* needed? why? */
 	/* Linux kernel sets HOME="/" when execing init,
 	 * and it can be overridden (but not unset?) on kernel's command line.

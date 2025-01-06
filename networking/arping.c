@@ -6,7 +6,7 @@
  * Busybox port: Nick Fedchik <nick@fedchik.org.ua>
  */
 //config:config ARPING
-//config:	bool "arping (9 kb)"
+//config:	bool "arping (9.1 kb)"
 //config:	default y
 //config:	help
 //config:	Ping hosts by ARP packets.
@@ -14,7 +14,6 @@
 //applet:IF_ARPING(APPLET(arping, BB_DIR_USR_SBIN, BB_SUID_DROP))
 
 //kbuild:lib-$(CONFIG_ARPING) += arping.o
-//kbuild:lib-$(CONFIG_ARPING) += ether_ntoa_r.o
 
 //usage:#define arping_trivial_usage
 //usage:       "[-fqbDUA] [-c CNT] [-w TIMEOUT] [-I IFACE] [-s SRC_IP] DST_IP"
@@ -37,7 +36,6 @@
 #include <net/if.h>
 #include <netinet/ether.h>
 #include <netpacket/packet.h>
-#include <linux/if_arp.h> /* for arphdr */
 
 #include "libbb.h"
 #include "common_bufsiz.h"

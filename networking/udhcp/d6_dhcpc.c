@@ -48,7 +48,6 @@
 //applet:IF_UDHCPC6(APPLET(udhcpc6, BB_DIR_USR_BIN, BB_SUID_DROP))
 
 //kbuild:lib-$(CONFIG_UDHCPC6) += d6_dhcpc.o d6_packet.o d6_socket.o common.o socket.o signalpipe.o
-//kbuild:lib-$(CONFIG_UDHCPC6) += ifaddrs.o
 //kbuild:lib-$(CONFIG_FEATURE_UDHCPC6_RFC3646) += domain_codec.o
 //kbuild:lib-$(CONFIG_FEATURE_UDHCPC6_RFC4704) += domain_codec.o
 
@@ -296,6 +295,7 @@ static void option_to_env(const uint8_t *option, const uint8_t *option_end)
 			*new_env() = xasprintf("ipv6=%s", ipv6str);
 
 			move_from_unaligned32(v32, option + 4 + 16 + 4);
+			v32 = ntohl(v32);
 			*new_env() = xasprintf("lease=%u", (unsigned)v32);
 			break;
 
@@ -333,6 +333,7 @@ static void option_to_env(const uint8_t *option, const uint8_t *option_end)
  * +-+-+-+-+-+-+-+-+
  */
 			move_from_unaligned32(v32, option + 4 + 4);
+			v32 = ntohl(v32);
 			*new_env() = xasprintf("ipv6prefix_lease=%u", (unsigned)v32);
 
 			sprint_nip6(ipv6str, option + 4 + 4 + 4 + 1);
@@ -547,7 +548,7 @@ static uint8_t *add_d6_client_options(uint8_t *ptr)
 static int d6_mcast_from_client_data_ifindex(struct d6_packet *packet, uint8_t *end)
 {
 	/* FF02::1:2 is "All_DHCP_Relay_Agents_and_Servers" address */
-	static const uint8_t FF02__1_2[16] = {
+	static const uint8_t FF02__1_2[16] ALIGNED(sizeof(long)) = {
 		0xFF, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02,
 	};
@@ -603,7 +604,7 @@ static NOINLINE int send_d6_info_request(void)
 	return d6_mcast_from_client_data_ifindex(&packet, opt_ptr);
 }
 
-/* Milticast a DHCPv6 Solicit packet to the network, with an optionally requested IP.
+/* Multicast a DHCPv6 Solicit packet to the network, with an optionally requested IP.
  *
  * RFC 3315 17.1.1. Creation of Solicit Messages
  *
@@ -843,7 +844,7 @@ static NOINLINE int send_d6_renew(struct in6_addr *server_ipv6, struct in6_addr 
 	uint8_t *opt_ptr;
 
 	/* Fill in: msg type, xid, ELAPSED_TIME */
-	opt_ptr = init_d6_packet(&packet, DHCPREQUEST);
+	opt_ptr = init_d6_packet(&packet, D6_MSG_RENEW);
 
 	/* server id */
 	opt_ptr = mempcpy(opt_ptr, client6_data.server_id, client6_data.server_id->len + 2+2);
@@ -889,7 +890,6 @@ int send_d6_release(struct in6_addr *server_ipv6, struct in6_addr *our_cur_ipv6)
 	if (client6_data.ia_pd)
 		opt_ptr = mempcpy(opt_ptr, client6_data.ia_pd, client6_data.ia_pd->len + 2+2);
 	/* Client-id */
-///vda
 	ci = udhcp_find_option(client_data.options, D6_OPT_CLIENTID, /*dhcpv6:*/ 1);
 	if (ci)
 		opt_ptr = mempcpy(opt_ptr, ci->data, D6_OPT_DATA + 2+2 + 6);
@@ -961,6 +961,7 @@ static NOINLINE int d6_recv_raw_packet(struct in6_addr *peer_ipv6, struct d6_pac
 	d6_dump_packet(&packet.data);
 
 	bytes -= sizeof(packet.ip6) + sizeof(packet.udp);
+	memset(d6_pkt, 0, sizeof(*d6_pkt));
 	memcpy(d6_pkt, &packet.data, bytes);
 	return bytes;
 }
@@ -1082,7 +1083,7 @@ static void change_listen_mode(int new_mode)
 		client_data.sockfd = -1;
 	}
 	if (new_mode == LISTEN_KERNEL)
-		client_data.sockfd = udhcp_listen_socket(/*INADDR_ANY,*/ CLIENT_PORT6, client_data.interface);
+		client_data.sockfd = d6_listen_socket(CLIENT_PORT6, client_data.interface);
 	else if (new_mode != LISTEN_NONE)
 		client_data.sockfd = d6_raw_socket(client_data.ifindex);
 	/* else LISTEN_NONE: client_data.sockfd stays closed */
@@ -1134,7 +1135,7 @@ static void client_background(void)
 //usage:#define udhcpc6_full_usage "\n"
 //usage:     "\n	-i IFACE	Interface to use (default "CONFIG_UDHCPC_DEFAULT_INTERFACE")"
 //usage:     "\n	-p FILE		Create pidfile"
-//usage:     "\n	-s PROG		Run PROG at DHCP events (default "CONFIG_UDHCPC_DEFAULT_SCRIPT")"
+//usage:     "\n	-s PROG		Run PROG at DHCP events (default "CONFIG_UDHCPC6_DEFAULT_SCRIPT")"
 //usage:     "\n	-B		Request broadcast replies"
 //usage:     "\n	-t N		Send up to N discover packets"
 //usage:     "\n	-T SEC		Pause between packets (default 3)"
@@ -1200,7 +1201,7 @@ int udhcpc6_main(int argc UNUSED_PARAM, char **argv)
 	IF_FEATURE_UDHCP_PORT(SERVER_PORT6 = 547;)
 	IF_FEATURE_UDHCP_PORT(CLIENT_PORT6 = 546;)
 	client_data.interface = CONFIG_UDHCPC_DEFAULT_INTERFACE;
-	client_data.script = CONFIG_UDHCPC_DEFAULT_SCRIPT;
+	client_data.script = CONFIG_UDHCPC6_DEFAULT_SCRIPT;
 	client_data.sockfd = -1;
 
 	/* Make sure fd 0,1,2 are open */
@@ -1488,6 +1489,7 @@ int udhcpc6_main(int argc UNUSED_PARAM, char **argv)
 					if (opt & OPT_l)
 						send_d6_info_request();
 					else /* send a broadcast renew request */
+//TODO: send_d6_renew uses D6_MSG_RENEW message, should we use D6_MSG_REBIND here instead?
 						send_d6_renew(/*server_ipv6:*/ NULL, requested_ipv6);
 					timeout = discover_timeout;
 					packet_num++;
@@ -1616,6 +1618,16 @@ int udhcpc6_main(int argc UNUSED_PARAM, char **argv)
 				prefix_timeout = 0;
 				option = d6_find_option(packet.d6_options, packet_end, D6_OPT_STATUS_CODE);
 				if (option && (option->data[0] | option->data[1]) != 0) {
+///FIXME:
+//    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//    |       OPTION_STATUS_CODE      |         option-len            |
+//    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//    |          status-code          |                               |
+//    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               |
+//    .                        status-message                         .
+//    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+// so why do we think it's NAK if data[0] is zero but data[1] is not? That's wrong...
+// we should also check that option->len is ok (i.e. not 0), right?
 					/* return to init state */
 					bb_info_msg("received DHCP NAK (%u)", option->data[4]);
 					d6_run_script(packet.d6_options,

@@ -6,31 +6,31 @@
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
 //config:config MD5SUM
-//config:	bool "md5sum (6.5 kb)"
+//config:	bool "md5sum (6.7 kb)"
 //config:	default y
 //config:	help
 //config:	Compute and check MD5 message digest
 //config:
 //config:config SHA1SUM
-//config:	bool "sha1sum (5.9 kb)"
+//config:	bool "sha1sum (6.7 kb)"
 //config:	default y
 //config:	help
 //config:	Compute and check SHA1 message digest
 //config:
 //config:config SHA256SUM
-//config:	bool "sha256sum (7 kb)"
+//config:	bool "sha256sum (8.2 kb)"
 //config:	default y
 //config:	help
 //config:	Compute and check SHA256 message digest
 //config:
 //config:config SHA512SUM
-//config:	bool "sha512sum (7.4 kb)"
+//config:	bool "sha512sum (7.3 kb)"
 //config:	default y
 //config:	help
 //config:	Compute and check SHA512 message digest
 //config:
 //config:config SHA3SUM
-//config:	bool "sha3sum (6.1 kb)"
+//config:	bool "sha3sum (6.3 kb)"
 //config:	default y
 //config:	help
 //config:	Compute and check SHA3 message digest
@@ -301,9 +301,7 @@ int md5_sha1_sum_main(int argc UNUSED_PARAM, char **argv)
 
 				count_total++;
 				filename_ptr = strchr(line, ' ');
-				if (filename_ptr == NULL
-				 || (filename_ptr[1] != ' ' && filename_ptr[1] != '*')
-				) {
+				if (!filename_ptr) {
 					if (flags & FLAG_WARN) {
 						bb_simple_error_msg("invalid format");
 					}
@@ -312,12 +310,17 @@ int md5_sha1_sum_main(int argc UNUSED_PARAM, char **argv)
 					free(line);
 					continue;
 				}
-				*filename_ptr = '\0';
-				filename_ptr += 2;
+				*filename_ptr++ = '\0';
+				/* coreutils 9.1 allows "HASH FILENAME" format,
+				 * with only one space. Skip the 'correct'
+				 * "  " or " *" delimiter if it is there:
+				 */
+				if (*filename_ptr == ' ' || *filename_ptr == '*')
+					filename_ptr++;
 
 				hash_value = hash_file(in_buf, filename_ptr, sha3_width);
 
-				if (hash_value && (strcmp((char*)hash_value, line) == 0)) {
+				if (hash_value && (strcasecmp((char*)hash_value, line) == 0)) {
 					if (!(flags & FLAG_SILENT))
 						printf("%s: OK\n", filename_ptr);
 				} else {

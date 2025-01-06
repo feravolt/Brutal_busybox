@@ -7,19 +7,19 @@
  * Licensed under GPLv2, see file LICENSE in this source tree.
  */
 //config:config HALT
-//config:	bool "halt (4 kb)"
+//config:	bool "halt (4.3 kb)"
 //config:	default y
 //config:	help
 //config:	Stop all processes and halt the system.
 //config:
 //config:config POWEROFF
-//config:	bool "poweroff (4 kb)"
+//config:	bool "poweroff (4.3 kb)"
 //config:	default y
 //config:	help
 //config:	Stop all processes and power off the system.
 //config:
 //config:config REBOOT
-//config:	bool "reboot (4 kb)"
+//config:	bool "reboot (4.3 kb)"
 //config:	default y
 //config:	help
 //config:	Stop all processes and reboot the system.
@@ -93,10 +93,6 @@
 
 #include "libbb.h"
 #include "reboot.h"
-
-#ifdef __BIONIC__
-#include "reboot.c"
-#endif
 
 #if ENABLE_FEATURE_WTMP
 #include <sys/utsname.h>
@@ -207,29 +203,6 @@ int halt_main(int argc UNUSED_PARAM, char **argv)
 
 	if (!(flags & 2)) /* no -n */
 		sync();
-
-#ifdef __BIONIC__
-	char *mode[4];
-	int c = 1;
-	mode[0] = strdup("reboot");
-	mode[1] = mode[2] = mode[3] = NULL;
-	switch (which) {
-	case 0:
-	case 1:
-		//-p for halt
-		mode[1] = strdup("-p");
-		c = 2;
-		break;
-	case 2:
-		//reboot
-		if (argc > 1) {
-			mode[1] = strdup(argv[1]);
-			c = 2;
-		}
-		break;
-	}
-	return reboot_android(c, mode);
-#endif
 
 	/* Perform action. */
 	rc = 1;

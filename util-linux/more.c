@@ -14,7 +14,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
 //config:config MORE
-//config:	bool "more (7 kb)"
+//config:	bool "more (7.2 kb)"
 //config:	default y
 //config:	help
 //config:	more is a simple utility which allows you to read text one screen
@@ -65,7 +65,7 @@ static void gotsig(int sig UNUSED_PARAM)
 	 * therefore it is safe in signal handler */
 	bb_putchar_stderr('\n');
 	tcsetattr_tty_TCSANOW(&G.initial_settings);
-	_exit(EXIT_FAILURE);
+	_exit_FAILURE();
 }
 
 #define CONVERTED_TAB_SIZE 8
@@ -84,11 +84,12 @@ int more_main(int argc UNUSED_PARAM, char **argv)
 	/* Parse options */
 	/* Accepted but ignored: */
 	/* -d	Display help instead of ringing bell */
+	/* -e   Exit immediately after writing the last line */
 	/* -f	Count logical lines (IOW: long lines are not folded) */
 	/* -l	Do not pause after any line containing a ^L (form feed) */
 	/* -s	Squeeze blank lines into one */
 	/* -u	Suppress underlining */
-	getopt32(argv, "dflsu");
+	getopt32(argv, "deflsu");
 	argv += optind;
 
 	/* Another popular pager, most, detects when stdout

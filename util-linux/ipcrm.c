@@ -8,7 +8,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
 //config:config IPCRM
-//config:	bool "ipcrm (3.2 kb)"
+//config:	bool "ipcrm (3.5 kb)"
 //config:	default y
 //config:	help
 //config:	The ipcrm utility allows the removal of System V interprocess
@@ -28,8 +28,7 @@
 #include <sys/msg.h>
 #include <sys/sem.h>
 
-#if (defined(__GNU_LIBRARY__) && !defined(_SEM_SEMUN_UNDEFINED)) || \
-    defined(__ANDROID__)
+#if defined(__GNU_LIBRARY__) && !defined(_SEM_SEMUN_UNDEFINED)
 /* union semun is defined by including <sys/sem.h> */
 #else
 /* according to X/OPEN we have to define it ourselves */

@@ -397,6 +397,13 @@ extern int *BB_GLOBAL_CONST bb_errno;
 uint64_t bb_bswap_64(uint64_t x) FAST_FUNC;
 #endif
 
+unsigned FAST_FUNC bb_popcnt_32(uint32_t m);
+#if ULONG_MAX > 0xffffffff
+unsigned FAST_FUNC bb_popcnt_long(unsigned long m);
+#else
+#define bb_popcnt_long(m) bb_popcnt_32(m)
+#endif
+
 unsigned long FAST_FUNC isqrt(unsigned long long N);
 
 unsigned long long monotonic_ns(void) FAST_FUNC;
@@ -1194,6 +1201,19 @@ void die_if_bad_username(const char* name) FAST_FUNC;
  * Dies on errors (on Linux, only xrealloc can cause this, not internal getgroups call).
  */
 gid_t *bb_getgroups(int *ngroups, gid_t *group_array) FAST_FUNC;
+/*
+ * True if GID is in our getgroups() result.
+ * getgroups() is cached in supplementary_array[], to make successive calls faster.
+ */
+struct cached_groupinfo {
+	uid_t euid;
+	gid_t egid;
+	int ngroups;
+	gid_t *supplementary_array;
+};
+uid_t FAST_FUNC get_cached_euid(uid_t *euid);
+gid_t FAST_FUNC get_cached_egid(gid_t *egid);
+int FAST_FUNC is_in_supplementary_groups(struct cached_groupinfo *groupinfo, gid_t gid);
 
 #if ENABLE_FEATURE_UTMP
 void FAST_FUNC write_new_utmp(pid_t pid, int new_type, const char *tty_name, const char *username, const char *hostname);
@@ -1207,7 +1227,7 @@ void FAST_FUNC update_utmp_DEAD_PROCESS(pid_t pid);
 
 
 int file_is_executable(const char *name) FAST_FUNC;
-char *find_executable(const char *filename, char **PATHp) FAST_FUNC;
+char *find_executable(const char *filename, const char **PATHp) FAST_FUNC;
 int executable_exists(const char *filename) FAST_FUNC;
 
 /* BB_EXECxx always execs (it's not doing NOFORK/NOEXEC stuff),
@@ -1281,6 +1301,8 @@ void set_task_comm(const char *comm) FAST_FUNC;
 #endif
 void exit_SUCCESS(void) NORETURN FAST_FUNC;
 void _exit_SUCCESS(void) NORETURN FAST_FUNC;
+void exit_FAILURE(void) NORETURN FAST_FUNC;
+void _exit_FAILURE(void) NORETURN FAST_FUNC;
 
 /* Helpers for daemonization.
  *
@@ -1307,10 +1329,12 @@ void _exit_SUCCESS(void) NORETURN FAST_FUNC;
  */
 enum {
 	DAEMON_CHDIR_ROOT      = 1 << 0,
-	DAEMON_DEVNULL_STDIO   = 1 << 1,
-	DAEMON_CLOSE_EXTRA_FDS = 1 << 2,
-	DAEMON_ONLY_SANITIZE   = 1 << 3, /* internal use */
-	//DAEMON_DOUBLE_FORK     = 1 << 4, /* double fork to avoid controlling tty */
+	DAEMON_DEVNULL_STDIN   = 1 << 1,
+	DAEMON_DEVNULL_OUTERR  = 2 << 1,
+	DAEMON_DEVNULL_STDIO   = 3 << 1,
+	DAEMON_CLOSE_EXTRA_FDS = 1 << 3,
+	DAEMON_ONLY_SANITIZE   = 1 << 4, /* internal use */
+	//DAEMON_DOUBLE_FORK     = 1 << 5, /* double fork to avoid controlling tty */
 };
 #if BB_MMU
   enum { re_execed = 0 };
@@ -1319,7 +1343,7 @@ enum {
 # define bb_daemonize(flags)                bb_daemonize_or_rexec(flags, bogus)
 #else
   extern bool re_execed;
-  /* Note: re_exec() and fork_or_rexec() do argv[0][0] |= 0x80 on NOMMU!
+  /* Note: re_exec() sets argv[0][0] |= 0x80 on NOMMU!
    * _Parent_ needs to undo it if it doesn't want to have argv[0] mangled.
    */
   void re_exec(char **argv) NORETURN FAST_FUNC;
@@ -1333,6 +1357,7 @@ enum {
 # define bb_daemonize(a) BUG_bb_daemonize_is_unavailable_on_nommu()
 #endif
 void bb_daemonize_or_rexec(int flags, char **argv) FAST_FUNC;
+/* Unlike bb_daemonize_or_rexec, these two helpers do not setsid: */
 void bb_sanitize_stdio(void) FAST_FUNC;
 #define bb_daemon_helper(arg) bb_daemonize_or_rexec((arg) | DAEMON_ONLY_SANITIZE, NULL)
 /* Clear dangerous stuff, set PATH. Return 1 if was run by different user. */
@@ -1342,6 +1367,7 @@ int sanitize_env_if_suid(void) FAST_FUNC;
 /* For top, ps. Some argv[i] are replaced by malloced "-opt" strings */
 void make_all_argv_opts(char **argv) FAST_FUNC;
 char* single_argv(char **argv) FAST_FUNC;
+char **skip_dash_dash(char **argv) FAST_FUNC;
 extern const char *const bb_argv_dash[]; /* { "-", NULL } */
 extern uint32_t option_mask32;
 uint32_t getopt32(char **argv, const char *applet_opts, ...) FAST_FUNC;
@@ -1442,6 +1468,13 @@ void bb_verror_msg(const char *s, va_list p, const char *strerr) FAST_FUNC;
 void bb_die_memory_exhausted(void) NORETURN FAST_FUNC;
 void bb_logenv_override(void) FAST_FUNC;
 
+/* x86 benefits from narrow exit code variables
+ * (because it has no widening MOV imm8,word32 insn, has to use MOV imm32,w
+ * for "exitcode = EXIT_FAILURE" and similar. The downside is that sometimes
+*  gcc widens the variable to int in various ugly suboptimal ways).
+ */
+typedef smalluint exitcode_t;
+
 #if ENABLE_FEATURE_SYSLOG_INFO
 void bb_info_msg(const char *s, ...) __attribute__ ((format (printf, 1, 2))) FAST_FUNC;
 void bb_simple_info_msg(const char *s) FAST_FUNC;
@@ -1510,12 +1543,16 @@ int ash_main(int argc, char** argv) IF_SHELL_ASH(MAIN_EXTERNALLY_VISIBLE);
 int hush_main(int argc, char** argv) IF_SHELL_HUSH(MAIN_EXTERNALLY_VISIBLE);
 /* If shell needs them, they exist even if not enabled as applets */
 int echo_main(int argc, char** argv) IF_ECHO(MAIN_EXTERNALLY_VISIBLE);
+int sleep_main(int argc, char **argv) IF_SLEEP(MAIN_EXTERNALLY_VISIBLE);
+/* See disabled "config ASH_SLEEP" in ash.c */
+#define ENABLE_ASH_SLEEP 0
 int printf_main(int argc, char **argv) IF_PRINTF(MAIN_EXTERNALLY_VISIBLE);
 int test_main(int argc, char **argv)
 #if ENABLE_TEST || ENABLE_TEST1 || ENABLE_TEST2
 		MAIN_EXTERNALLY_VISIBLE
 #endif
 ;
+int FAST_FUNC test_main2(struct cached_groupinfo *pgroupinfo, int argc, char **argv);
 int kill_main(int argc, char **argv)
 #if ENABLE_KILL || ENABLE_KILLALL || ENABLE_KILLALL5
 		MAIN_EXTERNALLY_VISIBLE
@@ -1924,6 +1961,7 @@ unsigned size_from_HISTFILESIZE(const char *hp) FAST_FUNC;
 #  define MAX_HISTORY 0
 # endif
 typedef const char *get_exe_name_t(int i) FAST_FUNC;
+typedef const char *sh_get_var_t(const char *name) FAST_FUNC;
 typedef struct line_input_t {
 	int flags;
 	int timeout;
@@ -1937,10 +1975,15 @@ typedef struct line_input_t {
 #  if ENABLE_SHELL_ASH || ENABLE_SHELL_HUSH
 	/* function to fetch additional application-specific names to match */
 	get_exe_name_t *get_exe_name;
-#   define EDITING_HAS_get_exe_name 1
-#  else
-#   define EDITING_HAS_get_exe_name 0
 #  endif
+# endif
+# if (ENABLE_FEATURE_USERNAME_COMPLETION || ENABLE_FEATURE_EDITING_FANCY_PROMPT) \
+  && (ENABLE_SHELL_ASH || ENABLE_SHELL_HUSH)
+	/* function to fetch value of shell variable */
+	sh_get_var_t *sh_get_var;
+#  define EDITING_HAS_sh_get_var 1
+# else
+#  define EDITING_HAS_sh_get_var 0
 # endif
 # if MAX_HISTORY
 	int cnt_history;
@@ -1969,11 +2012,11 @@ enum {
 	FOR_SHELL        = DO_HISTORY | TAB_COMPLETION | USERNAME_COMPLETION | LI_INTERRUPTIBLE,
 };
 line_input_t *new_line_input_t(int flags) FAST_FUNC;
-#if ENABLE_FEATURE_EDITING_SAVEHISTORY
+# if ENABLE_FEATURE_EDITING_SAVEHISTORY
 void free_line_input_t(line_input_t *n) FAST_FUNC;
-#else
-# define free_line_input_t(n) free(n)
-#endif
+# else
+#  define free_line_input_t(n) free(n)
+# endif
 /*
  * maxsize must be >= 2.
  * Returns:
@@ -1984,7 +2027,7 @@ void free_line_input_t(line_input_t *n) FAST_FUNC;
 int read_line_input(line_input_t *st, const char *prompt, char *command, int maxsize) FAST_FUNC;
 void show_history(const line_input_t *st) FAST_FUNC;
 # if ENABLE_FEATURE_EDITING_SAVE_ON_EXIT
-void save_history(line_input_t *st);
+void save_history(line_input_t *st) FAST_FUNC;
 # endif
 #else
 #define MAX_HISTORY 0
@@ -1993,10 +2036,7 @@ int read_line_input(const char* prompt, char* command, int maxsize) FAST_FUNC;
 	read_line_input(prompt, command, maxsize)
 #endif
 
-#ifndef EDITING_HAS_get_exe_name
-# define EDITING_HAS_get_exe_name 0
-#endif
-
+unsigned long* FAST_FUNC get_malloc_cpu_affinity(int pid, unsigned *sz);
 
 #ifndef COMM_LEN
 # ifdef TASK_COMM_LEN
@@ -2339,12 +2379,12 @@ void XZALLOC_CONST_PTR(const void *pptr, size_t size) FAST_FUNC;
  * use bb_default_login_shell and following defines.
  * If you change LIBBB_DEFAULT_LOGIN_SHELL,
  * don't forget to change increment constant. */
-#define LIBBB_DEFAULT_LOGIN_SHELL  "-/sbin/sh"
+#define LIBBB_DEFAULT_LOGIN_SHELL  "-/bin/sh"
 extern const char bb_default_login_shell[] ALIGN1;
 /* "/bin/sh" */
 #define DEFAULT_SHELL              (bb_default_login_shell+1)
 /* "sh" */
-#define DEFAULT_SHELL_SHORT_NAME   (bb_default_login_shell+7)
+#define DEFAULT_SHELL_SHORT_NAME   (bb_default_login_shell+6)
 
 /* The following devices are the same on all systems.  */
 #define CURRENT_TTY "/dev/tty"
