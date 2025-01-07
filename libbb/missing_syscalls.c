@@ -19,14 +19,6 @@
 #define __NR_shmctl 31
 #endif
 
-#ifndef __NR_semget
-#define __NR_semget 64
-#endif
-
-#ifndef __NR_semop
-#define __NR_semop 65
-#endif
-
 #ifndef __NR_semctl
 #define __NR_semctl 66
 #endif
@@ -80,11 +72,6 @@ int msgget(key_t key, int msgflg)
   return syscall(__NR_msgget, key, msgflg);
 }
 
-int semget(key_t key, int nsems, int semflg)
-{
-  return syscall(__NR_semget, key, nsems, semflg);
-}
-
 struct msqid_ds; /* #include <linux/msg.h> */
 int msgctl(int msqid, int cmd, struct msqid_ds *buf)
 {
@@ -96,12 +83,6 @@ struct shmid_ds; /* #include <linux/shm.h> */
 int shmctl(int shmid, int cmd, struct shmid_ds *buf)
 {
   return syscall(__NR_shmctl, shmid, cmd, buf);
-}
-
-struct sembuf; /* #include <linux/sem.h> */
-int semop(int semid, struct sembuf *sops, unsigned nsops)
-{
-  return syscall(__NR_semop, semid, sops, nsops);
 }
 
 # if __ANDROID_API__ < 21

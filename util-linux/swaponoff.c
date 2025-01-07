@@ -248,7 +248,7 @@ static int do_em_all_in_fstab(void)
 				/* save global flags for the next round */
 				save_g_flags();
 				if (ENABLE_FEATURE_SWAPON_DISCARD) {
-					char *p = hasmntopt(m, "discard");
+					char *p = (char *)hasmntopt(m, "discard");
 					if (p) {
 						/* move to '=' or to end of string */
 						p += 7;
@@ -256,7 +256,7 @@ static int do_em_all_in_fstab(void)
 					}
 				}
 				if (ENABLE_FEATURE_SWAPON_PRI) {
-					char *p = hasmntopt(m, "pri");
+					char *p = (char *)hasmntopt(m, "pri");
 					if (p) {
 						set_priority_flag(p + 4);
 					}

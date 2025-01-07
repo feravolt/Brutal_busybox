@@ -41,6 +41,7 @@
 //#include <netdb.h>
 #include "libbb.h"
 #include "common_bufsiz.h"
+#include "../libres/dietdns.h"
 
 /*
  * Mini nslookup implementation for busybox

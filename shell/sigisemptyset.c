@@ -4,5 +4,6 @@
 
 int sigisemptyset(const sigset_t *set)
 {
-  return set;
+  // Cast *set to unsigned long and compare with 0
+  return (*(const unsigned long *)set) == 0;
 }

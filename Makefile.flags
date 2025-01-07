@@ -24,9 +24,9 @@ CFLAGS += $(call cc-option,-Wwrite-strings,)
 CFLAGS += $(call cc-option,-Wundef,)
 CFLAGS += $(call cc-option,-Wstrict-prototypes,)
 CFLAGS += $(call cc-option,-Wunused -Wunused-parameter,)
-CFLAGS += $(call cc-option,-Wno-unused-function -Wno-unused-value -Wno-macro-redefined,)
+CFLAGS += $(call cc-option,-Wno-unused-function -Wno-unused-value -Wno-implicit-function-declaration,)
 CFLAGS += $(call cc-option,-Wno-missing-prototypes -Wno-missing-declarations,)
-CFLAGS += $(call cc-option,-Wno-format-security,)
+CFLAGS += $(call cc-option,-Wno-format-security -Wno-macro-redefined,)
 # warn about C99 declaration after statement
 CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
 # If you want to add more -Wsomething above, make sure that it is
@@ -48,28 +48,13 @@ endif
 # gcc 3.x emits bogus "old style proto" warning on find.c:alloc_action()
 CFLAGS += $(call cc-ifversion, -ge, 0400, -Wold-style-definition)
 
-ifneq ($(lastword $(subst -, ,$(CC))),clang)
-# "clang-9: warning: optimization flag '-finline-limit=0' is not supported
-CFLAGS += $(call cc-option,-finline-limit=0,)
-endif
-
 CFLAGS += $(call cc-option,-fno-builtin-strlen -fomit-frame-pointer -ffunction-sections -fdata-sections,)
 # -fno-guess-branch-probability: prohibit pseudo-random guessing
 # of branch probabilities (hopefully makes bloatcheck more stable):
 CFLAGS += $(call cc-option,-fno-guess-branch-probability,)
 CFLAGS += $(call cc-option,-funsigned-char,)
 
-ifeq ($(CONFIG_STATIC_LIBGCC),y)
-# Disable it, for example, if you get
-# "clang-9: warning: argument unused during compilation: '-static-libgcc'"
-CFLAGS += $(call cc-option,-static-libgcc,)
-endif
-
-CFLAGS += $(call cc-option,-falign-functions=1,)
-ifneq ($(lastword $(subst -, ,$(CC))),clang)
-# "clang-9: warning: optimization flag '-falign-jumps=1' is not supported" (and same for other two)
-CFLAGS += $(call cc-option,-falign-jumps=1 -falign-labels=1 -falign-loops=1,)
-endif
+CFLAGS += $(call cc-option,-falign-functions=16,)
 
 # Defeat .eh_frame bloat (gcc 4.6.3 x86-32 defconfig: 20% smaller busybox binary):
 CFLAGS += $(call cc-option,-fno-unwind-tables,)
